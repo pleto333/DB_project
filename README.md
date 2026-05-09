@@ -1,16 +1,13 @@
 # DB_project
 
-사용자가 보유 중인 주식에 대해 현재가, 뉴스 감성 분석, 예측 결과를 종합하여 개인 맞춤형 투자 리포트를 제공하는 데이터베이스 팀프로젝트입니다.
+뉴스 데이터를 LLM API로 분석해 추천 종목을 제공하는 데이터베이스 팀프로젝트입니다.
 
 ## 핵심 산출물
 
 - `sql/schema.sql`: `stock_prediction_db` 데이터베이스 및 전체 테이블 생성 SQL
 - `sql/sample_data.sql`: 발표/테스트용 예시 데이터 INSERT SQL
-- `src/db/database.py`: Python `mysql-connector-python` 연동 예제 및 주요 DB 함수
-- `docs/database_design.md`: 발표 자료에 넣기 쉬운 DB 설계 설명, 텍스트 ERD, 실행 방법
+- `src/db/database.py`: Python `mysql-connector-python` 연동 예제 및 추천 결과 JSON 조회 함수
 - `docs/table_dictionary.md`: 각 테이블과 컬럼의 의미를 정리한 데이터 사전
-- `docs/erd_visual.md`: Mermaid ERD 시각화 코드
-- `docs/images/db_erd.svg`: 발표용 ERD 이미지
 
 ## 실행 순서
 
