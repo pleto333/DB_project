@@ -8,6 +8,9 @@
 - `sql/sample_data.sql`: 발표/테스트용 예시 데이터 INSERT SQL
 - `src/db/database.py`: Python `mysql-connector-python` 연동 예제 및 주요 DB 함수
 - `docs/database_design.md`: 발표 자료에 넣기 쉬운 DB 설계 설명, 텍스트 ERD, 실행 방법
+- `docs/table_dictionary.md`: 각 테이블과 컬럼의 의미를 정리한 데이터 사전
+- `docs/erd_visual.md`: Mermaid ERD 시각화 코드
+- `docs/images/db_erd.svg`: 발표용 ERD 이미지
 
 ## 실행 순서
 
