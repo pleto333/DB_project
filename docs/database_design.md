@@ -22,12 +22,28 @@
 | stocks | 추천 가능한 종목 저장 |
 | news_articles | 수집한 뉴스 저장 |
 | llm_analysis | LLM 원본 분석 결과 저장 |
+| analysis_news_articles | LLM 분석에 사용된 뉴스 연결 |
 | stock_recommendations | 추천 종목 결과 저장 |
+
+## DB 설계 보강 내용
+
+처음 설계에서는 `news_articles`와 `llm_analysis`가 직접 연결되어 있지 않았다.
+이 경우 추천 결과가 저장되더라도 어떤 뉴스들이 LLM 입력으로 사용되었는지 추적하기 어렵다.
+
+이를 보완하기 위해 `analysis_news_articles` 연결 테이블을 추가했다.
+하나의 LLM 분석은 여러 개의 뉴스를 입력으로 사용할 수 있고, 하나의 뉴스도 여러 분석에서 재사용될 수 있으므로 다대다 관계로 설계했다.
+
+이 보강으로 추천 결과 검증 흐름이 명확해졌다.
+
+```text
+뉴스 원본 확인 -> LLM 분석 결과 확인 -> 추천 종목과 추천 이유 확인
+```
 
 ## 관계
 
 ```text
 users (1) ── (N) llm_analysis
+news_articles (N) ── (N) llm_analysis
 llm_analysis (1) ── (N) stock_recommendations
 stocks (1) ── (N) stock_recommendations
 ```
@@ -40,9 +56,9 @@ stocks (1) ── (N) stock_recommendations
     {
       "rank_no": 1,
       "stock_code": "005930",
-      "stock_name": "Samsung Electronics",
+      "stock_name": "삼성전자",
       "recommendation": "BUY",
-      "reason": "AI semiconductor demand is positive.",
+      "reason": "AI 서버 투자 확대로 메모리와 반도체 수요 증가가 기대된다.",
       "confidence": 0.87
     }
   ]

@@ -5,6 +5,7 @@ CREATE DATABASE IF NOT EXISTS stock_prediction_db
 USE stock_prediction_db;
 
 DROP TABLE IF EXISTS stock_recommendations;
+DROP TABLE IF EXISTS analysis_news_articles;
 DROP TABLE IF EXISTS llm_analysis;
 DROP TABLE IF EXISTS user_reports;
 DROP TABLE IF EXISTS stock_predictions;
@@ -73,6 +74,23 @@ CREATE TABLE llm_analysis (
         ON DELETE SET NULL,
     INDEX idx_llm_analysis_user_id (user_id),
     INDEX idx_llm_analysis_analyzed_at (analyzed_at)
+) ENGINE=InnoDB;
+
+CREATE TABLE analysis_news_articles (
+    analysis_id BIGINT UNSIGNED NOT NULL,
+    article_id BIGINT UNSIGNED NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (analysis_id, article_id),
+    CONSTRAINT fk_analysis_news_articles_analysis
+        FOREIGN KEY (analysis_id) REFERENCES llm_analysis (analysis_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_analysis_news_articles_article
+        FOREIGN KEY (article_id) REFERENCES news_articles (article_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    INDEX idx_analysis_news_articles_article_id (article_id)
 ) ENGINE=InnoDB;
 
 CREATE TABLE stock_recommendations (

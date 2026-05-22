@@ -61,7 +61,18 @@ LLM API 분석 결과.
 | created_at | 생성 시간 |
 | updated_at | 수정 시간 |
 
-## 5. stock_recommendations
+## 5. analysis_news_articles
+
+LLM 분석 결과와 분석에 사용된 뉴스 원본을 연결한다.
+추천 결과가 어떤 뉴스 묶음에서 나왔는지 추적하기 위한 테이블이다.
+
+| 컬럼명 | 설명 |
+| --- | --- |
+| analysis_id | LLM 분석 결과 번호 |
+| article_id | 분석에 사용된 뉴스 번호 |
+| created_at | 연결 데이터 생성 시간 |
+
+## 6. stock_recommendations
 
 LLM 분석으로 나온 추천 종목.
 
@@ -85,9 +96,9 @@ LLM 분석으로 나온 추천 종목.
     {
       "rank_no": 1,
       "stock_code": "005930",
-      "stock_name": "Samsung Electronics",
+      "stock_name": "삼성전자",
       "recommendation": "BUY",
-      "reason": "AI semiconductor demand is positive.",
+      "reason": "AI 서버 투자 확대로 메모리와 반도체 수요 증가가 기대된다.",
       "confidence": 0.87
     }
   ]

@@ -11,12 +11,17 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
 .idea/
 .vscode/
 
 *.log
 *.tmp
 *.bak
+~$*.pptx
 
 .DS_Store
 Thumbs.db

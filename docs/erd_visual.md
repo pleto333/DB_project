@@ -3,6 +3,8 @@
 ```mermaid
 erDiagram
     USERS ||--o{ LLM_ANALYSIS : requests
+    NEWS_ARTICLES ||--o{ ANALYSIS_NEWS_ARTICLES : used_in
+    LLM_ANALYSIS ||--o{ ANALYSIS_NEWS_ARTICLES : uses
     LLM_ANALYSIS ||--o{ STOCK_RECOMMENDATIONS : creates
     STOCKS ||--o{ STOCK_RECOMMENDATIONS : recommended_as
 
@@ -45,6 +47,12 @@ erDiagram
         DATETIME analyzed_at
     }
 
+    ANALYSIS_NEWS_ARTICLES {
+        BIGINT analysis_id PK, FK
+        BIGINT article_id PK, FK
+        DATETIME created_at
+    }
+
     STOCK_RECOMMENDATIONS {
         BIGINT recommendation_id PK
         BIGINT analysis_id FK
@@ -57,4 +65,6 @@ erDiagram
 ```
 
 `news_articles`는 전체 금융 뉴스를 저장하는 테이블이다.
-특정 종목과 직접 연결하지 않고, LLM 분석 입력 데이터로 사용한다.
+특정 종목과 직접 연결하지 않고, `analysis_news_articles`를 통해 어떤 LLM 분석에 사용되었는지만 기록한다.
+
+이 구조를 사용하면 추천 종목이 나온 뒤에도 사용된 뉴스 원문, LLM 응답, 최종 추천 결과를 순서대로 추적할 수 있다.

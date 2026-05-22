@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>News Stock Recommendation</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="topbar" aria-label="서비스 요약">
+        <div>
+          <p class="eyebrow">LS Securities News + LLM Analysis</p>
+          <h1>뉴스 기반 주식 종목 추천</h1>
+        </div>
+        <div class="status-pill" id="dataSource">Loading</div>
+      </section>
+
+      <section class="summary-grid" aria-label="요약 지표">
+        <article class="metric">
+          <span class="metric-label">분석 번호</span>
+          <strong id="analysisId">-</strong>
+        </article>
+        <article class="metric">
+          <span class="metric-label">추천 종목</span>
+          <strong id="recommendationCount">-</strong>
+        </article>
+        <article class="metric">
+          <span class="metric-label">근거 뉴스</span>
+          <strong id="newsCount">-</strong>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <section class="panel" aria-labelledby="recommendationsTitle">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Recommendations</p>
+              <h2 id="recommendationsTitle">추천 종목</h2>
+            </div>
+            <button class="icon-button" id="refreshButton" type="button" aria-label="새로고침" title="새로고침">
+              &#8635;
+            </button>
+          </div>
+          <div class="recommendation-list" id="recommendationList"></div>
+        </section>
+
+        <section class="panel" aria-labelledby="newsTitle">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Source News</p>
+              <h2 id="newsTitle">분석에 사용된 뉴스</h2>
+            </div>
+          </div>
+          <div class="news-list" id="newsList"></div>
+        </section>
+      </section>
+    </main>
+
+    <template id="recommendationTemplate">
+      <article class="recommendation-card">
+        <div class="rank"></div>
+        <div class="recommendation-main">
+          <div class="stock-row">
+            <div>
+              <h3></h3>
+              <span class="stock-code"></span>
+            </div>
+            <span class="tag"></span>
+          </div>
+          <p class="reason"></p>
+          <div class="confidence-wrap">
+            <span class="confidence-label"></span>
+            <div class="confidence-track">
+              <div class="confidence-bar"></div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </template>
+
+    <template id="newsTemplate">
+      <article class="news-card">
+        <div class="news-meta"></div>
+        <h3></h3>
+        <p></p>
+        <a target="_blank" rel="noreferrer">원문 보기</a>
+      </article>
+    </template>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

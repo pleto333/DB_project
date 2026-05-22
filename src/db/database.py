@@ -13,7 +13,7 @@ def get_connection() -> mysql.connector.MySQLConnection:
     """Create a MySQL connection."""
     return mysql.connector.connect(
         host=os.getenv("DB_HOST", "localhost"),
-        port=int(os.getenv("DB_PORT", "3306")),
+        port=int(os.getenv("DB_PORT", "3307")),
         user=os.getenv("DB_USER", "root"),
         password=os.getenv("DB_PASSWORD", ""),
         database=os.getenv("DB_NAME", "stock_prediction_db"),
@@ -135,6 +135,30 @@ def save_llm_analysis(
         conn.close()
 
 
+def link_analysis_news_articles(analysis_id: int, article_ids: list[int]) -> None:
+    """Link an LLM analysis result to the news articles used as input."""
+    if not article_ids:
+        return
+
+    sql = """
+        INSERT IGNORE INTO analysis_news_articles (analysis_id, article_id)
+        VALUES (%s, %s)
+    """
+    values = [(analysis_id, article_id) for article_id in article_ids]
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.executemany(sql, values)
+        conn.commit()
+    except Error:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def save_stock_recommendation(
     analysis_id: int,
     stock_id: int,
@@ -185,14 +209,135 @@ def get_recommendations_json(analysis_id: int) -> dict[str, Any]:
     try:
         cursor.execute(sql, (analysis_id,))
         rows = cursor.fetchall()
-        return {"recommendations": rows}
+        return {"analysis_id": analysis_id, "recommendations": rows}
     finally:
         cursor.close()
         conn.close()
 
 
-def get_latest_recommendations_json() -> dict[str, Any]:
-    """Return the latest recommendation list."""
+def get_all_recommendations_json() -> dict[str, Any]:
+    """Return recommendation data from every LLM analysis."""
+    sql = """
+        SELECT
+            r.analysis_id,
+            JSON_UNQUOTE(JSON_EXTRACT(a.response_json, '$.theme')) AS theme,
+            r.rank_no,
+            s.stock_code,
+            s.stock_name,
+            r.recommendation,
+            r.reason,
+            r.confidence
+        FROM stock_recommendations r
+        JOIN llm_analysis a ON a.analysis_id = r.analysis_id
+        JOIN stocks s ON s.stock_id = r.stock_id
+        ORDER BY a.analyzed_at DESC, r.rank_no
+    """
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        return {"analysis_id": "all", "recommendations": rows}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_analysis_news_articles_json(analysis_id: int) -> dict[str, Any]:
+    """Return the news articles used for a specific LLM analysis."""
+    sql = """
+        SELECT
+            n.article_id,
+            n.title,
+            n.summary,
+            n.url,
+            n.publisher,
+            n.source,
+            n.published_at
+        FROM analysis_news_articles ana
+        JOIN news_articles n ON n.article_id = ana.article_id
+        WHERE ana.analysis_id = %s
+        ORDER BY n.published_at DESC, n.article_id DESC
+    """
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(sql, (analysis_id,))
+        rows = cursor.fetchall()
+        return {"analysis_id": analysis_id, "news_articles": rows}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_all_analysis_news_articles_json() -> dict[str, Any]:
+    """Return news articles used across every LLM analysis."""
+    sql = """
+        SELECT
+            ana.analysis_id,
+            JSON_UNQUOTE(JSON_EXTRACT(a.response_json, '$.theme')) AS theme,
+            n.article_id,
+            n.title,
+            n.summary,
+            n.url,
+            n.publisher,
+            n.source,
+            n.published_at
+        FROM analysis_news_articles ana
+        JOIN llm_analysis a ON a.analysis_id = ana.analysis_id
+        JOIN news_articles n ON n.article_id = ana.article_id
+        ORDER BY a.analyzed_at DESC, n.published_at DESC, n.article_id DESC
+    """
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        return {"analysis_id": "all", "news_articles": rows}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_analyses_json() -> dict[str, Any]:
+    """Return saved LLM analyses for selecting a recommendation batch."""
+    sql = """
+        SELECT
+            a.analysis_id,
+            a.model_name,
+            a.input_summary,
+            JSON_UNQUOTE(JSON_EXTRACT(a.response_json, '$.theme')) AS theme,
+            a.analyzed_at,
+            COUNT(DISTINCT r.recommendation_id) AS recommendation_count,
+            COUNT(DISTINCT ana.article_id) AS news_count
+        FROM llm_analysis a
+        LEFT JOIN stock_recommendations r ON r.analysis_id = a.analysis_id
+        LEFT JOIN analysis_news_articles ana ON ana.analysis_id = a.analysis_id
+        GROUP BY
+            a.analysis_id,
+            a.model_name,
+            a.input_summary,
+            a.response_json,
+            a.analyzed_at
+        ORDER BY a.analyzed_at DESC, a.analysis_id DESC
+    """
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        return {"analyses": rows}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_latest_analysis_id() -> int | None:
+    """Return the latest LLM analysis ID."""
     sql = """
         SELECT analysis_id
         FROM llm_analysis
@@ -206,12 +351,18 @@ def get_latest_recommendations_json() -> dict[str, Any]:
         cursor.execute(sql)
         row = cursor.fetchone()
         if row is None:
-            return {"recommendations": []}
-        analysis_id = row[0]
+            return None
+        return row[0]
     finally:
         cursor.close()
         conn.close()
 
+
+def get_latest_recommendations_json() -> dict[str, Any]:
+    """Return the latest recommendation list."""
+    analysis_id = get_latest_analysis_id()
+    if analysis_id is None:
+        return {"analysis_id": None, "recommendations": []}
     return get_recommendations_json(analysis_id)
 
 
