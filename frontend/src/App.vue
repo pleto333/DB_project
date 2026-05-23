@@ -88,7 +88,7 @@ const chartPoints = computed(() => {
 });
 const chartAreaPoints = computed(() => `10,190 ${chartPoints.value} 510,190`);
 const fearGaugeStyle = computed(() => ({
-  background: `conic-gradient(#16805d 0deg ${fearIndex.value * 1.8}deg, #e6edf0 ${fearIndex.value * 1.8}deg 180deg, transparent 180deg 360deg)`,
+  background: `conic-gradient(#6ab2a7 0deg ${fearIndex.value * 1.8}deg, #e6edf0 ${fearIndex.value * 1.8}deg 180deg, transparent 180deg 360deg)`,
 }));
 
 function formatPercent(value) {
