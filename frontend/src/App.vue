@@ -58,6 +58,197 @@ const sectorDashboard = {
     { name: "반도체와반도체장비", rate: "-0.97%" },
   ],
 };
+const demoAnalyses = [
+  {
+    analysis_id: 1,
+    model_name: "gpt-example",
+    input_summary: "AI 반도체 수요, HBM 공급 부족, 반도체 수출 회복 뉴스는 반도체 대형주에 긍정적이다.",
+    theme: "반도체",
+    analyzed_at: "2026-05-09 10:00:00",
+    recommendation_count: 2,
+    news_count: 3,
+  },
+  {
+    analysis_id: 2,
+    model_name: "gpt-example",
+    input_summary: "전기차 판매 회복, 배터리 소재 가격 안정, 북미 공장 투자 확대 뉴스는 배터리 업종에 긍정적이다.",
+    theme: "2차전지",
+    analyzed_at: "2026-05-12 11:00:00",
+    recommendation_count: 3,
+    news_count: 3,
+  },
+  {
+    analysis_id: 3,
+    model_name: "gpt-example",
+    input_summary: "광고 시장 둔화와 커머스 경쟁 심화 뉴스는 플랫폼 업종에 단기 부담으로 작용할 수 있다.",
+    theme: "플랫폼",
+    analyzed_at: "2026-05-11 12:00:00",
+    recommendation_count: 2,
+    news_count: 2,
+  },
+];
+const demoRecommendations = [
+  {
+    analysis_id: 1,
+    theme: "반도체",
+    rank_no: 1,
+    stock_code: "005930",
+    stock_name: "삼성전자",
+    recommendation: "BUY",
+    reason: "AI 서버 투자 확대로 메모리와 반도체 수요 증가가 기대된다.",
+    confidence: 0.87,
+  },
+  {
+    analysis_id: 1,
+    theme: "반도체",
+    rank_no: 2,
+    stock_code: "000660",
+    stock_name: "SK하이닉스",
+    recommendation: "BUY",
+    reason: "HBM 수요 확대와 메모리 업황 회복 기대가 크다.",
+    confidence: 0.84,
+  },
+  {
+    analysis_id: 2,
+    theme: "2차전지",
+    rank_no: 1,
+    stock_code: "373220",
+    stock_name: "LG에너지솔루션",
+    recommendation: "BUY",
+    reason: "전기차 수요 회복과 북미 생산 확대에 따른 성장 기대가 있다.",
+    confidence: 0.86,
+  },
+  {
+    analysis_id: 2,
+    theme: "2차전지",
+    rank_no: 2,
+    stock_code: "006400",
+    stock_name: "삼성SDI",
+    recommendation: "BUY",
+    reason: "고부가 배터리 중심의 수익성 개선 가능성이 있다.",
+    confidence: 0.8,
+  },
+  {
+    analysis_id: 2,
+    theme: "2차전지",
+    rank_no: 3,
+    stock_code: "003670",
+    stock_name: "포스코퓨처엠",
+    recommendation: "WATCH",
+    reason: "소재 가격 안정은 긍정적이지만 업황 회복 확인이 더 필요하다.",
+    confidence: 0.69,
+  },
+  {
+    analysis_id: 3,
+    theme: "플랫폼",
+    rank_no: 1,
+    stock_code: "035420",
+    stock_name: "NAVER",
+    recommendation: "WATCH",
+    reason: "광고 성장 둔화와 커머스 경쟁 비용 증가를 확인할 필요가 있다.",
+    confidence: 0.72,
+  },
+  {
+    analysis_id: 3,
+    theme: "플랫폼",
+    rank_no: 2,
+    stock_code: "035720",
+    stock_name: "카카오",
+    recommendation: "WATCH",
+    reason: "플랫폼 업종 전반의 광고 둔화 우려가 단기 부담이다.",
+    confidence: 0.68,
+  },
+];
+const demoNewsArticles = [
+  {
+    analysis_id: 1,
+    theme: "반도체",
+    article_id: 1,
+    title: "AI 반도체 수요 증가세 지속",
+    summary: "AI 서버 투자가 확대되면서 메모리 반도체 수요가 증가할 가능성이 제기되고 있다.",
+    url: "https://news.example.com/ai-semiconductor-demand",
+    publisher: "예시경제",
+    source: "ls_securities",
+    published_at: "2026-05-09 09:00:00",
+  },
+  {
+    analysis_id: 1,
+    theme: "반도체",
+    article_id: 2,
+    title: "HBM 공급 부족 우려 확대",
+    summary: "고대역폭 메모리 수요가 빠르게 늘면서 주요 반도체 기업의 실적 개선 기대가 커지고 있다.",
+    url: "https://news.example.com/hbm-supply-shortage",
+    publisher: "예시증권",
+    source: "ls_securities",
+    published_at: "2026-05-09 09:20:00",
+  },
+  {
+    analysis_id: 1,
+    theme: "반도체",
+    article_id: 3,
+    title: "반도체 수출 회복세 확인",
+    summary: "국내 반도체 수출이 회복 흐름을 보이며 업황 개선 기대가 이어지고 있다.",
+    url: "https://news.example.com/semiconductor-export-recovery",
+    publisher: "마켓데일리",
+    source: "ls_securities",
+    published_at: "2026-05-09 09:40:00",
+  },
+  {
+    analysis_id: 2,
+    theme: "2차전지",
+    article_id: 4,
+    title: "전기차 판매 회복 기대",
+    summary: "하반기 전기차 판매량 회복 전망이 나오면서 배터리 업종 투자 심리가 개선되고 있다.",
+    url: "https://news.example.com/ev-sales-recovery",
+    publisher: "예시경제",
+    source: "ls_securities",
+    published_at: "2026-05-10 10:00:00",
+  },
+  {
+    analysis_id: 2,
+    theme: "2차전지",
+    article_id: 5,
+    title: "배터리 소재 가격 안정세",
+    summary: "리튬 등 주요 배터리 소재 가격이 안정되면서 배터리 기업의 수익성 개선 기대가 나오고 있다.",
+    url: "https://news.example.com/battery-material-price",
+    publisher: "예시증권",
+    source: "ls_securities",
+    published_at: "2026-05-10 10:20:00",
+  },
+  {
+    analysis_id: 2,
+    theme: "2차전지",
+    article_id: 6,
+    title: "북미 배터리 공장 투자 확대",
+    summary: "국내 배터리 기업들이 북미 생산 거점을 확대하며 중장기 성장 기반을 강화하고 있다.",
+    url: "https://news.example.com/north-america-battery-investment",
+    publisher: "마켓데일리",
+    source: "ls_securities",
+    published_at: "2026-05-10 10:40:00",
+  },
+  {
+    analysis_id: 3,
+    theme: "플랫폼",
+    article_id: 7,
+    title: "인터넷 플랫폼 기업, 광고 시장 둔화 우려",
+    summary: "이번 분기 온라인 광고 시장 성장세가 둔화될 수 있다는 전망이 나오고 있다.",
+    url: "https://news.example.com/platform-ad-slowdown",
+    publisher: "예시경제",
+    source: "ls_securities",
+    published_at: "2026-05-11 11:00:00",
+  },
+  {
+    analysis_id: 3,
+    theme: "플랫폼",
+    article_id: 8,
+    title: "커머스 경쟁 심화로 플랫폼 비용 부담 증가",
+    summary: "플랫폼 기업들의 커머스 경쟁이 심화되면서 마케팅 비용 증가가 실적 부담 요인으로 거론된다.",
+    url: "https://news.example.com/platform-commerce-competition",
+    publisher: "예시증권",
+    source: "ls_securities",
+    published_at: "2026-05-11 11:20:00",
+  },
+];
 
 const selectedAnalysis = computed(() =>
   analyses.value.find((analysis) => analysis.analysis_id === analysisId.value),
@@ -103,11 +294,71 @@ function analysisLabel(analysis) {
 }
 
 async function fetchJson(url) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error("API 응답을 불러오지 못했습니다.");
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error("API 응답을 불러오지 못했습니다.");
+    }
+    return response.json();
+  } catch (error) {
+    const demoPayload = getDemoPayload(url);
+    if (demoPayload) {
+      return demoPayload;
+    }
+    throw error;
   }
-  return response.json();
+}
+
+function getDemoPayload(url) {
+  const analysisMatch = url.match(/\/api\/analyses\/(\d+)\/(recommendations|news)/);
+
+  if (url === "/api/analyses") {
+    return { analyses: demoAnalyses, data_source: "static-demo" };
+  }
+
+  if (url === "/api/recommendations") {
+    return { analysis_id: "all", recommendations: demoRecommendations, data_source: "static-demo" };
+  }
+
+  if (url === "/api/analyses/news") {
+    return { analysis_id: "all", news_articles: demoNewsArticles, data_source: "static-demo" };
+  }
+
+  if (url === "/api/recommendations/latest") {
+    return {
+      analysis_id: 2,
+      recommendations: demoRecommendations.filter((item) => item.analysis_id === 2),
+      data_source: "static-demo",
+    };
+  }
+
+  if (url === "/api/analyses/latest/news") {
+    return {
+      analysis_id: 2,
+      news_articles: demoNewsArticles.filter((item) => item.analysis_id === 2),
+      data_source: "static-demo",
+    };
+  }
+
+  if (analysisMatch) {
+    const nextAnalysisId = Number(analysisMatch[1]);
+    const resource = analysisMatch[2];
+    if (resource === "recommendations") {
+      return {
+        analysis_id: nextAnalysisId,
+        recommendations: demoRecommendations.filter((item) => item.analysis_id === nextAnalysisId),
+        data_source: "static-demo",
+      };
+    }
+
+    return {
+      analysis_id: nextAnalysisId,
+      news_articles: demoNewsArticles.filter((item) => item.analysis_id === nextAnalysisId),
+      data_source: "static-demo",
+    };
+  }
+
+  return null;
 }
 
 async function loadAnalysisData(nextAnalysisId) {

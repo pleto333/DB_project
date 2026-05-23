@@ -28,6 +28,7 @@
 - `docs/database_design.md`: DB 설계 설명
 - `docs/api_integration_guide.md`: 실제 뉴스 API 연동 가이드
 - `docs/frontend_handoff.md`: 프론트엔드 수정 및 교체 가이드
+- `docs/github_pages_deploy.md`: GitHub Pages 공유용 배포 가이드
 - `output/stock_news_recommendation_presentation.pptx`: 발표용 PPT
 
 ## 실행 방법
@@ -142,11 +143,13 @@ Vue 개발 서버는 `/api` 요청을 FastAPI 서버 `http://127.0.0.1:8000`으�
 - Vue 화면은 발표와 데이터 흐름 확인을 위한 임시 화면입니다.
 - 환율, 코스피, 공포지수, 업종별 등락률은 현재 정적 샘플 데이터입니다.
 - GitHub Pages 같은 정적 호스팅에서는 FastAPI/MySQL이 함께 실행되지 않습니다.
+- GitHub Pages 배포본에서는 API 실패 시 프론트 내부의 `static-demo` 데이터가 표시됩니다.
 
 ## 참고 문서
 
 - [프론트엔드 수정 및 교체 가이드](docs/frontend_handoff.md)
 - [실제 뉴스 API 연동 가이드](docs/api_integration_guide.md)
+- [GitHub Pages 배포 가이드](docs/github_pages_deploy.md)
 - [DB 설계 설명](docs/database_design.md)
 - [테이블 컬럼 설명](docs/table_dictionary.md)
 - [발표 구성 메모](docs/ppt_slide_plan.md)
