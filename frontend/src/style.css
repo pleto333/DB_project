@@ -32,6 +32,7 @@ body {
   min-width: 320px;
   margin: 0;
   background: linear-gradient(180deg, #fbfcfd 0%, var(--bg) 48%, #f1f5f7 100%);
+  overflow-x: hidden;
 }
 
 button,
@@ -176,6 +177,14 @@ select {
   gap: 12px;
   position: sticky;
   top: 16px;
+}
+
+.side-market > *,
+.main-dashboard,
+.metrics article,
+.control-panel,
+.insight-card {
+  min-width: 0;
 }
 
 .main-dashboard {
@@ -1024,8 +1033,14 @@ h2 {
 
 @media (max-width: 560px) {
   .page {
-    width: min(100% - 20px, 1200px);
-    padding-top: 14px;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 10px 8px 32px;
+  }
+
+  .market-ticker {
+    margin-bottom: 10px;
   }
 
   .hero,
@@ -1041,14 +1056,25 @@ h2 {
     padding: 14px;
   }
 
+  .hero {
+    min-height: auto;
+    gap: 18px;
+  }
+
+  .eyebrow {
+    margin-bottom: 7px;
+    font-size: 11px;
+  }
+
   h1 {
-    font-size: 28px;
-    line-height: 1.22;
+    font-size: 26px;
+    line-height: 1.2;
   }
 
   .hero-copy {
-    font-size: 15px;
-    line-height: 1.58;
+    margin-top: 12px;
+    font-size: 14px;
+    line-height: 1.55;
   }
 
   .ticker-item {
@@ -1057,15 +1083,209 @@ h2 {
     padding: 0 16px;
   }
 
+  .ticker-item strong,
+  .ticker-item em {
+    font-size: 12px;
+  }
+
+  .ticker-item b {
+    font-size: 14px;
+  }
+
+  .dashboard-grid {
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  .main-dashboard {
+    order: 1;
+  }
+
+  .side-market {
+    order: 2;
+  }
+
+  .side-market {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .side-market .eyebrow {
+    overflow-wrap: anywhere;
+  }
+
+  .exchange-card,
+  .fear-card {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    align-items: center;
+    gap: 12px;
+    min-height: 0;
+  }
+
+  .insight-title {
+    gap: 8px;
+    margin-bottom: 0;
+  }
+
+  .market-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .exchange-card h2,
+  .fear-card h2 {
+    font-size: 18px;
+  }
+
+  .exchange-box {
+    padding: 12px;
+  }
+
+  .exchange-box strong {
+    font-size: 24px;
+  }
+
+  .exchange-box p,
+  .fear-card p {
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+
+  .fear-gauge {
+    width: 124px;
+    height: 62px;
+    margin: 0 auto;
+  }
+
+  .fear-gauge::after {
+    width: 78px;
+    height: 39px;
+  }
+
+  .fear-gauge strong {
+    font-size: 23px;
+  }
+
+  .fear-gauge span {
+    font-size: 12px;
+  }
+
+  .fear-card > p {
+    grid-column: 1 / -1;
+    margin-top: -4px;
+  }
+
+  .control-panel {
+    gap: 12px;
+  }
+
+  .control-panel select {
+    min-height: 42px;
+  }
+
+  .filter-group {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .filter-group button {
+    min-width: 0;
+    padding-inline: 6px;
+  }
+
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin: 12px 0;
+  }
+
+  .metrics article {
+    min-height: 86px;
+  }
+
+  .metrics span {
+    margin-bottom: 8px;
+    font-size: 12px;
+  }
+
+  .metrics strong {
+    font-size: 25px;
+  }
+
+  .layout,
+  .lower-market {
+    gap: 12px;
+  }
+
+  .panel-title {
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+  }
+
+  .stock-row h3 {
+    font-size: 18px;
+  }
+
   .recommendation-card {
     grid-template-columns: 1fr;
+    min-height: 0;
+    gap: 12px;
+  }
+
+  .tag {
+    min-width: 0;
+    padding-inline: 12px;
   }
 
   .confidence {
     grid-template-columns: 1fr;
   }
 
-  .side-market {
-    grid-template-columns: 1fr;
+  .news-card {
+    min-height: 0;
+  }
+
+  .kospi-card {
+    min-height: 0;
+  }
+
+  .chart-summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .chart-summary strong {
+    font-size: 30px;
+  }
+
+  .kospi-chart {
+    min-height: 190px;
+  }
+
+  .sector-header {
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .sector-index-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sector-index-row article {
+    min-height: 92px;
+  }
+
+  .sector-index-row strong {
+    font-size: 23px;
+  }
+
+  .sector-list li {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+
+  .sector-list li em {
+    grid-column: 2;
   }
 }

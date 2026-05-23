@@ -293,6 +293,16 @@ function analysisLabel(analysis) {
   return analysis.theme || `분석 ${analysis.analysis_id}`;
 }
 
+function recommendationLabel(value) {
+  if (value === "BUY") {
+    return "매수";
+  }
+  if (value === "WATCH") {
+    return "관찰";
+  }
+  return value === "ALL" ? "전체" : value;
+}
+
 async function fetchJson(url) {
   try {
     const response = await fetch(url);
@@ -512,7 +522,7 @@ onMounted(loadDashboard);
               :class="{ active: recommendationFilter === filter }"
               @click="recommendationFilter = filter"
             >
-              {{ filter === "ALL" ? "전체" : filter }}
+              {{ recommendationLabel(filter) }}
             </button>
           </div>
         </section>
@@ -565,7 +575,9 @@ onMounted(loadDashboard);
                     <h3>{{ item.stock_name }}</h3>
                     <span>{{ item.theme ? `${item.theme} / ${item.stock_code}` : item.stock_code }}</span>
                   </div>
-                  <strong class="tag" :class="item.recommendation.toLowerCase()">{{ item.recommendation }}</strong>
+                  <strong class="tag" :class="item.recommendation.toLowerCase()">
+                    {{ recommendationLabel(item.recommendation) }}
+                  </strong>
                 </div>
                 <p>{{ item.reason }}</p>
                 <div class="confidence">
