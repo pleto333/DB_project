@@ -29,6 +29,7 @@
 - `docs/api_integration_guide.md`: 실제 뉴스 API 연동 가이드
 - `docs/frontend_handoff.md`: 프론트엔드 수정 및 교체 가이드
 - `docs/github_pages_deploy.md`: GitHub Pages 공유용 배포 가이드
+- `docs/local_tunnel_share.md`: 로컬 API까지 연결된 화면을 임시 공유하는 방법
 - `output/stock_news_recommendation_presentation.pptx`: 발표용 PPT
 
 ## 실행 방법
@@ -150,6 +151,7 @@ Vue 개발 서버는 `/api` 요청을 FastAPI 서버 `http://127.0.0.1:8000`으�
 - [프론트엔드 수정 및 교체 가이드](docs/frontend_handoff.md)
 - [실제 뉴스 API 연동 가이드](docs/api_integration_guide.md)
 - [GitHub Pages 배포 가이드](docs/github_pages_deploy.md)
+- [로컬 터널 공유 가이드](docs/local_tunnel_share.md)
 - [DB 설계 설명](docs/database_design.md)
 - [테이블 컬럼 설명](docs/table_dictionary.md)
 - [발표 구성 메모](docs/ppt_slide_plan.md)
