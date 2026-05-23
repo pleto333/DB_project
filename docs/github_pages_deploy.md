@@ -45,6 +45,14 @@
 
 배포가 성공하면 Actions 로그 또는 Settings > Pages 화면에서 Pages URL을 확인할 수 있습니다.
 
+이 설정이 되어 있지 않으면 Actions의 `Configure Pages` 단계에서 다음과 비슷한 오류가 납니다.
+
+```text
+Get Pages site failed. Please verify that the repository has Pages enabled and configured to build using GitHub Actions.
+```
+
+이 오류는 코드 문제가 아니라 저장소 Pages 기능이 아직 켜져 있지 않아서 발생합니다. 저장소 관리자 권한이 있는 사람이 위 설정을 한 뒤 실패한 workflow를 다시 실행하면 됩니다.
+
 ## 예상 URL
 
 저장소 이름이 `DB_project`이므로 보통 아래 주소가 됩니다.
@@ -63,4 +71,3 @@ GitHub Pages에서는 FastAPI/MySQL/LS증권 API/LLM API가 실행되지 않기 
 현재 화면 데이터는 static-demo 샘플 데이터입니다.
 실제 DB 연동은 로컬 백엔드 또는 별도 서버 배포 환경에서 확인해야 합니다.
 ```
-
