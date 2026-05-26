@@ -326,6 +326,37 @@ def fetch_ls_news() -> str:
     return ""
 
 
+def fetch_global_indices() -> dict[str, Any]:
+    try:
+        import yfinance as yf
+    except ImportError:
+        print("yfinance 패키지가 없습니다. pip install yfinance")
+        return {}
+
+    symbols = {
+        "KOSPI": "^KS11",
+        "KOSDAQ": "^KQ11",
+        "NASDAQ": "^IXIC",
+        "S&P500": "^GSPC",
+        "DOW": "^DJI",
+        "닛케이": "^N225",
+        "WTI": "CL=F",
+        "금": "GC=F",
+        "환율(USD)": "USDKRW=X",
+    }
+    result: dict[str, Any] = {}
+    for name, symbol in symbols.items():
+        try:
+            fi = yf.Ticker(symbol).fast_info
+            price = fi.last_price
+            prev = fi.previous_close
+            if price and prev:
+                result[name] = {"price": round(float(price), 2), "change": round((price - prev) / prev * 100, 2)}
+        except Exception:
+            pass
+    return result
+
+
 def fetch_stock_daily_prices(access_token: str, stock_code: str, days: int = 10) -> list[float]:
     stock_api_url = os.getenv("LS_STOCK_API_URL", LS_DEFAULT_STOCK_API_URL).strip() or LS_DEFAULT_STOCK_API_URL
     payload = {

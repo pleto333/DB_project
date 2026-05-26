@@ -451,6 +451,27 @@ function formatIndexDisplay(data) {
 const kospiDisplay = computed(() => formatIndexDisplay(kospiData.value))
 const kosdaqDisplay = computed(() => formatIndexDisplay(kosdaqData.value))
 
+function formatGlobalPrice(name, price) {
+  if (name === 'WTI' || name === '금') return price.toLocaleString('en-US', { maximumFractionDigits: 2 }) + '달러'
+  if (name === '환율(USD)') return Math.round(price).toLocaleString('ko-KR') + '원'
+  return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+async function loadGlobalIndices() {
+  try {
+    const res = await axios.get(`${BASE_URL}/market/global`)
+    const data = res.data
+    tickerItems.value = tickerItems.value.map(item => {
+      const d = data[item.name]
+      if (!d) return item
+      // KOSPI/KOSDAQ는 LS 실시간 데이터가 있으면 덮어쓰지 않음
+      if (item.name === 'KOSPI' && kospiData.value?.value) return item
+      if (item.name === 'KOSDAQ' && kosdaqData.value?.value) return item
+      return { ...item, value: formatGlobalPrice(item.name, d.price), change: d.change }
+    })
+  } catch (_) {}
+}
+
 async function loadMarketIndices() {
   try {
     const res = await axios.get(`${BASE_URL}/market/indices`)
@@ -585,8 +606,10 @@ onMounted(async () => {
   await loadMarketIndices()
   await loadPortfolio()
   loadAllPrices()
+  loadGlobalIndices()
   refreshTimer = setInterval(loadRecommendations, 60 * 1000)
   indicesTimer = setInterval(loadMarketIndices, 30 * 1000)
+  setInterval(loadGlobalIndices, 5 * 60 * 1000)
 })
 
 onUnmounted(() => {

@@ -86,8 +86,8 @@ async def run_scheduled_analysis() -> None:
             result = await loop.run_in_executor(None, analyze_news_with_gemini, news_data)
             save_analysis_to_db(result, news_data)
             print("[스케줄러] 분석 완료. 다음 실행까지 10분 대기.")
-        except Exception as exc:
-            print(f"[스케줄러] 오류: {exc}")
+        except (Exception, SystemExit) as exc:
+            print(f"[스케줄러] 오류: {exc}. 10분 후 재시도.")
         await asyncio.sleep(600)
 
 

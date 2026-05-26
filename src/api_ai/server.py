@@ -17,7 +17,7 @@ except ImportError as exc:
 
 from .config import get_project_root
 from .gemini import analyze_news_with_gemini, get_dummy_analysis_result, get_sample_news_data
-from .ls_api import fetch_ls_access_token, fetch_ls_news, fetch_stock_daily_prices
+from .ls_api import fetch_global_indices, fetch_ls_access_token, fetch_ls_news, fetch_stock_daily_prices
 from .scheduler import market_indices, run_market_indices, run_scheduled_analysis, save_analysis_to_db
 
 
@@ -210,6 +210,24 @@ def create_web_app():
             raise
         except Exception as exc:
             raise HTTPException(status_code=500, detail={"message": f"로그인 오류: {exc}"})
+
+    _global_cache: dict[str, Any] = {}
+    _GLOBAL_CACHE_TTL = 300
+
+    @app.get("/market/global")
+    async def get_global_indices() -> dict[str, Any]:
+        now = time.time()
+        if _global_cache.get("data") and now - _global_cache.get("ts", 0) < _GLOBAL_CACHE_TTL:
+            return _global_cache["data"]
+        loop = asyncio.get_event_loop()
+        try:
+            data = await loop.run_in_executor(None, fetch_global_indices)
+        except Exception:
+            data = {}
+        if data:
+            _global_cache["data"] = data
+            _global_cache["ts"] = now
+        return data
 
     _price_cache: dict[str, tuple[float, list[float]]] = {}
     _PRICE_CACHE_TTL = 300

@@ -49,6 +49,7 @@ src/api_ai/
 | POST | `/analyze` | Gemini AI 분석 실행 |
 | GET | `/recommendations/latest` | 최신 AI 분석 결과 조회 |
 | GET | `/market/indices` | KOSPI/KOSDAQ 실시간 지수 |
+| GET | `/market/global` | 글로벌 지수/원자재/환율 (yfinance, 5분 캐시) |
 | GET | `/stocks/price?codes=005930,000660` | 종목 일봉 주가 (최근 10거래일) |
 | GET | `/portfolio?user_id={id}` | 사용자 포트폴리오 조회 |
 | POST | `/portfolio` | 포트폴리오 종목 추가 |
@@ -69,7 +70,20 @@ LS 키가 없으면 샘플 뉴스 데이터로 대체합니다.
 
 ### 실시간 지수
 LS증권 `IJ_` WebSocket TR로 KOSPI(001), KOSDAQ(101) 지수를 실시간 수신합니다.  
-장 마감 시간에는 마지막 수신값을 유지하며, LS 키가 없으면 `-`로 표시됩니다.
+장 마감 후에는 yfinance(`^KS11`, `^KQ11`)로 종가를 표시합니다.
+
+### 글로벌 지수 / 원자재 / 환율
+yfinance를 통해 15분 지연 데이터를 제공합니다. 5분 캐시 적용.
+
+| 항목 | yfinance 심볼 |
+|------|--------------|
+| NASDAQ | `^IXIC` |
+| S&P500 | `^GSPC` |
+| DOW | `^DJI` |
+| 닛케이 | `^N225` |
+| WTI | `CL=F` |
+| 금 | `GC=F` |
+| 환율(USD/KRW) | `USDKRW=X` |
 
 ### 종목 주가 (스파크라인)
 LS증권 `t8413` TR (일봉)으로 최근 10거래일 종가를 조회합니다.
