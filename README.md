@@ -30,14 +30,23 @@ mysql -u root -p stock_prediction_db < sql/sample_data.sql
 프로젝트 루트에 `.env` 파일을 생성합니다. `.env.example`을 복사해서 값을 채우세요.
 
 ```bash
+# Mac / Linux
 cp .env.example .env
-# .env 파일을 열어 DB_HOST, DB_PASSWORD, GEMINI_API_KEY 등 입력
+
+# Windows
+copy .env.example .env
 ```
+
+`.env` 파일을 열어 `DB_HOST`, `DB_PASSWORD`, `GEMINI_API_KEY` 등을 입력합니다.
 
 ### 4. 백엔드 서버 실행
 
 ```bash
+# Mac / Linux
 python3 -m uvicorn src.api_ai.AI:app --host 0.0.0.0 --port 8080
+
+# Windows
+python -m uvicorn src.api_ai.AI:app --host 0.0.0.0 --port 8080
 ```
 
 ### 5. 프론트엔드 실행
