@@ -10,48 +10,69 @@ LS증권 뉴스 데이터를 Gemini AI로 분석해 추천 종목을 제공하�
 - `src/api_ai/`: LS증권 뉴스 수신 → Gemini AI 분석 → FastAPI 웹서버 ([상세 문서](src/api_ai/README.md))
 - `docs/table_dictionary.md`: 각 테이블과 컬럼의 의미를 정리한 데이터 사전
 
-## 실행 순서
+---
+
+## 실행 방법 (Mac / Linux)
 
 ### 1. 패키지 설치
-
 ```bash
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 ```
 
 ### 2. DB 초기화
-
 ```bash
 mysql -u root -p < sql/schema.sql
 mysql -u root -p stock_prediction_db < sql/sample_data.sql
 ```
 
 ### 3. 환경변수 설정
-
-프로젝트 루트에 `.env` 파일을 생성합니다. `.env.example`을 복사해서 값을 채우세요.
-
 ```bash
-# Mac / Linux
 cp .env.example .env
-
-# Windows
-copy .env.example .env
+# .env 파일을 열어 DB_HOST, DB_PASSWORD, GEMINI_API_KEY 등 입력
 ```
 
-`.env` 파일을 열어 `DB_HOST`, `DB_PASSWORD`, `GEMINI_API_KEY` 등을 입력합니다.
+### 4. 백엔드 서버 실행
+```bash
+python3 -m uvicorn src.api_ai.AI:app --host 0.0.0.0 --port 8080
+```
+
+### 5. 프론트엔드 실행
+```bash
+cd src/ui
+npm install
+npm run dev
+```
+
+브라우저에서 `http://localhost:5173` 접속
+
+---
+
+## 실행 방법 (Windows)
+
+### 1. 패키지 설치
+```powershell
+pip install -r requirements.txt
+```
+
+### 2. DB 초기화
+```powershell
+Get-Content sql/schema.sql | mysql -u root -p
+Get-Content sql/sample_data.sql | mysql -u root -p stock_prediction_db
+```
+
+### 3. 환경변수 설정
+```powershell
+copy .env.example .env
+# .env 파일을 열어 DB_HOST, DB_PASSWORD, GEMINI_API_KEY 등 입력
+```
 
 ### 4. 백엔드 서버 실행
-
-```bash
-# Mac / Linux
-python3 -m uvicorn src.api_ai.AI:app --host 0.0.0.0 --port 8080
-
-# Windows
+```powershell
 python -m uvicorn src.api_ai.AI:app --host 0.0.0.0 --port 8080
 ```
 
 ### 5. 프론트엔드 실행
-
-```bash
+```powershell
 cd src/ui
 npm install
 npm run dev
