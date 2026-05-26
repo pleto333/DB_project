@@ -12,6 +12,7 @@ DROP TABLE IF EXISTS sentiment_analysis;
 DROP TABLE IF EXISTS news_articles;
 DROP TABLE IF EXISTS stock_prices;
 DROP TABLE IF EXISTS user_holdings;
+DROP TABLE IF EXISTS portfolio;
 DROP TABLE IF EXISTS stocks;
 DROP TABLE IF EXISTS users;
 
@@ -73,6 +74,19 @@ CREATE TABLE llm_analysis (
         ON DELETE SET NULL,
     INDEX idx_llm_analysis_user_id (user_id),
     INDEX idx_llm_analysis_analyzed_at (analyzed_at)
+) ENGINE=InnoDB;
+
+CREATE TABLE portfolio (
+    portfolio_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id      BIGINT UNSIGNED NOT NULL,
+    stock_code   VARCHAR(20)     NOT NULL,
+    stock_name   VARCHAR(100)    NOT NULL,
+    added_at     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT uq_portfolio_user_stock UNIQUE (user_id, stock_code),
+    CONSTRAINT fk_portfolio_user
+        FOREIGN KEY (user_id) REFERENCES users (user_id)
+        ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 CREATE TABLE stock_recommendations (
