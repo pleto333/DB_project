@@ -17,6 +17,7 @@ __pycache__/
 *.log
 *.tmp
 *.bak
+backend/local_state.json
 
 .DS_Store
 Thumbs.db

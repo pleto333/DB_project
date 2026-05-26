@@ -53,7 +53,7 @@
             <span>📰</span> 뉴스
           </button>
           <button :class="['nav-item', { active: currentTab === 'portfolio' }]"
-            @click="currentTab = 'portfolio'; sidebarOpen = false">
+            @click="currentTab = 'portfolio'; sidebarOpen = false; loadPortfolio()">
             <span>💼</span> 포트폴리오
             <span v-if="portfolio.length > 0" class="nav-badge">{{ portfolio.length }}</span>
           </button>
@@ -106,7 +106,7 @@
                       {{ stock.change > 0 ? '▲' : '▼' }} {{ Math.abs(stock.change) }}%
                     </p>
                   </div>
-                  <button class="bookmark-btn" @click="addToPortfolio(stock)"
+                  <button class="bookmark-btn" @click.stop="togglePortfolio(stock)"
                     :class="{ bookmarked: isBookmarked(stock.code) }"
                     :title="isBookmarked(stock.code) ? '포트폴리오에서 제거' : '포트폴리오에 추가'">
                     {{ isBookmarked(stock.code) ? '★' : '☆' }}
@@ -271,7 +271,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { useRouter } from 'vue-router'
 const router = useRouter()
@@ -300,7 +300,22 @@ function onSearchInput() {
   clearTimeout(searchTimer)
   searchResults.value = []
   if (searchQuery.value.trim().length === 0) return
-  searchTimer = setTimeout(() => searchStocks(), 400)
+  searchTimer = setTimeout(() => searchStocksFromApi(), 400)
+}
+
+async function searchStocksFromApi() {
+  searchLoading.value = true
+  try {
+    const res = await axios.get(`${BASE_URL}/stocks/search`, {
+      params: { query: searchQuery.value.trim() }
+    })
+    searchResults.value = res.data
+  } catch (error) {
+    searchResults.value = []
+    showMessage(error.response?.data?.message || '종목 가격 조회에 실패했습니다', 'error')
+  } finally {
+    searchLoading.value = false
+  }
 }
 
 async function searchStocks() {
@@ -345,12 +360,12 @@ async function addToPortfolio(stock) {
 
   try {
     // POST /portfolio  →  { user_id, stock_code, stock_name }
-    await axios.post(`${BASE_URL}/portfolio`, {
+    const res = await axios.post(`${BASE_URL}/portfolio`, {
       user_id: userId.value,
       stock_code: stock.code,
       stock_name: stock.name
     })
-    portfolio.value.push({ ...stock })
+    portfolio.value = res.data.portfolio || [...portfolio.value, { ...stock }]
     showMessage(`${stock.name}을(를) 포트폴리오에 추가했습니다`, 'success')
     searchQuery.value = ''
     searchResults.value = []
@@ -360,16 +375,24 @@ async function addToPortfolio(stock) {
 }
 
 async function removeFromPortfolio(code) {
-  const stock = portfolio.value.find(s => s.code === code)
+  const stock = portfolio.value.find(s => s.code === code) || { name: code }
   try {
     // DELETE /portfolio  →  { user_id, stock_code }
-    await axios.delete(`${BASE_URL}/portfolio`, {
+    const res = await axios.delete(`${BASE_URL}/portfolio`, {
       data: { user_id: userId.value, stock_code: code }
     })
-    portfolio.value = portfolio.value.filter(s => s.code !== code)
+    portfolio.value = res.data.portfolio || portfolio.value.filter(s => s.code !== code)
     showMessage(`${stock.name}을(를) 포트폴리오에서 제거했습니다`, 'success')
   } catch (error) {
     showMessage(error.response?.data?.message || '제거에 실패했습니다', 'error')
+  }
+}
+
+async function togglePortfolio(stock) {
+  if (isBookmarked(stock.code)) {
+    await removeFromPortfolio(stock.code)
+  } else {
+    await addToPortfolio(stock)
   }
 }
 
@@ -378,6 +401,35 @@ function showMessage(msg, type) {
   apiMessageType.value = type
   setTimeout(() => { apiMessage.value = '' }, 3000)
 }
+
+async function loadMarketData() {
+  try {
+    const [tickerRes, stockRes] = await Promise.all([
+      axios.get(`${BASE_URL}/market/tickers`),
+      axios.get(`${BASE_URL}/stocks/recommended`)
+    ])
+    tickerItems.value = tickerRes.data
+    recommendedStocks.value = stockRes.data
+  } catch (error) {
+    showMessage(error.response?.data?.message || '현재가 데이터를 가져오지 못했습니다', 'error')
+  }
+}
+
+async function loadPortfolio() {
+  try {
+    const res = await axios.get(`${BASE_URL}/portfolio`, {
+      params: { user_id: userId.value }
+    })
+    portfolio.value = res.data
+  } catch (error) {
+    showMessage(error.response?.data?.message || '포트폴리오를 불러오지 못했습니다', 'error')
+  }
+}
+
+onMounted(() => {
+  loadMarketData()
+  loadPortfolio()
+})
 
 // ── 티커/차트 더미 데이터 ──
 const tickerItems = ref([

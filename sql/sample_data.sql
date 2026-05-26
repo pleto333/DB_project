@@ -7,8 +7,8 @@ VALUES
 
 INSERT INTO stocks (stock_code, stock_name, market)
 VALUES
-    ('005930', 'Samsung Electronics', 'KOSPI'),
-    ('000660', 'SK hynix', 'KOSPI'),
+    ('005930', '삼성전자', 'KOSPI'),
+    ('000660', 'SK하이닉스', 'KOSPI'),
     ('035420', 'NAVER', 'KOSPI');
 
 INSERT INTO news_articles (title, summary, url, url_hash, publisher, source, published_at)

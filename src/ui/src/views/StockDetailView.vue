@@ -172,7 +172,29 @@ const stock = ref({
   ]
 })
 
+stock.value = {
+  name: '불러오는 중',
+  code: route.params.code || '',
+  price: '-',
+  change: 0,
+  recommend: true,
+  confidence: 0,
+  summary: '분석 데이터를 불러오는 중입니다.',
+  positives: [],
+  negatives: [],
+  detailAnalysis: '',
+  chartLine: '0,30 20,30 40,30 60,30 80,30 100,30 120,30 140,30 160,30',
+  areaLine: '0,30 20,30 40,30 60,30 80,30 100,30 120,30 140,30 160,30 160,60 0,60',
+  relatedNews: []
+}
+
 onMounted(async () => {
+  const [stockRes, portfolioRes] = await Promise.all([
+    axios.get(`${BASE_URL}/stocks/${route.params.code}/analysis`),
+    axios.get(`${BASE_URL}/portfolio`, { params: { user_id: 'hong123' } })
+  ])
+  stock.value = { ...stock.value, ...stockRes.data }
+  isAdded.value = portfolioRes.data.some(item => item.code === stock.value.code)
   // TODO: 백엔드 API 연동
   // const res = await axios.get(`${BASE_URL}/stocks/${route.params.code}/analysis`)
   // stock.value = res.data

@@ -64,9 +64,11 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import axios from 'axios'
 
 const BASE_URL = 'http://localhost:5000'
+const router = useRouter()
 
 const mode = ref('login')
 
@@ -92,7 +94,7 @@ async function handleLogin() {
       password: loginForm.value.password
     })
     console.log('로그인 성공:', response.data)
-    // TODO: router.push('/main')
+    router.push('/main')
   } catch (error) {
     loginError.value = error.response?.data?.message || '아이디 또는 비밀번호가 올바르지 않습니다.'
   } finally {

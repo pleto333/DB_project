@@ -39,6 +39,26 @@ CREATE TABLE stocks (
     INDEX idx_stocks_stock_name (stock_name)
 ) ENGINE=InnoDB;
 
+CREATE TABLE user_holdings (
+    holding_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT UNSIGNED NOT NULL,
+    stock_id BIGINT UNSIGNED NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT uk_user_holdings_user_stock UNIQUE (user_id, stock_id),
+    CONSTRAINT fk_user_holdings_user
+        FOREIGN KEY (user_id) REFERENCES users (user_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_user_holdings_stock
+        FOREIGN KEY (stock_id) REFERENCES stocks (stock_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    INDEX idx_user_holdings_user_id (user_id),
+    INDEX idx_user_holdings_stock_id (stock_id)
+) ENGINE=InnoDB;
+
 CREATE TABLE news_articles (
     article_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     title VARCHAR(300) NOT NULL,
