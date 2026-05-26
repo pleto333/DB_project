@@ -24,6 +24,7 @@ Required packages:
     RUN_WEB_SERVER=false
     WEB_HOST=127.0.0.1
     WEB_PORT=8000
+    CORS_ALLOW_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173
     LS_NEWS_HOT_CODE=2023051510383935PL7HQ87D
     LS_NEWS_DATE=20230515
     LS_NEWS_TIME=103839
@@ -46,6 +47,7 @@ import requests
 from dotenv import load_dotenv
 from google import genai
 
+load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
 
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 DEFAULT_GEMINI_FALLBACK_MODELS = ["gemini-2.0-flash", "gemini-2.5-flash-lite"]
@@ -67,32 +69,38 @@ NO_NEWS_DATA_MESSAGES = (
     "다시 조회 바랍니다",
 )
 
+_market_indices: dict[str, Any] = {
+    "kospi": {"value": None, "drate": None, "sign": None, "change": None, "updated_at": None},
+    "kosdaq": {"value": None, "drate": None, "sign": None, "change": None, "updated_at": None},
+}
+
 
 def get_sample_news_data() -> str:
     """Return sample Korean market news so Gemini flow can be tested without LS API."""
     return """
 [샘플 뉴스 데이터]
-1. 날짜: 2026-05-26
-   제목: AI 반도체 수요 확대에 국내 HBM 및 첨단 패키징 관련주 관심
-   내용: 글로벌 빅테크의 AI 서버 투자가 이어지면서 고대역폭 메모리, 반도체 장비,
-   첨단 패키징 기업에 대한 시장 관심이 커지고 있다. 다만 단기 급등 부담과
-   고객사 투자 속도 변화는 리스크로 지적된다.
+1. 날짜: 2026-05-27
+   제목: SK하이닉스·삼성전자, HBM4 수주 경쟁 본격화…엔비디아 납품 기대
+   내용: SK하이닉스(000660)가 HBM4 양산 일정을 앞당기며 엔비디아 공급 우위를 유지하고 있다.
+   삼성전자(005930)도 HBM4E 인증 작업에 속도를 내고 있으며, 한미반도체(042700)의
+   TC본더 장비 수주도 함께 늘어나는 추세다.
 
-2. 날짜: 2026-05-26
-   제목: 전력 인프라 투자 확대 기대, 변압기와 전선 업종 수주 모멘텀 부각
-   내용: 데이터센터와 재생에너지 설비 증가로 전력망 증설 필요성이 커지며
-   변압기, 전선, 전력기기 기업의 해외 수주 기대가 높아지고 있다.
+2. 날짜: 2026-05-27
+   제목: HD현대일렉트릭·LS ELECTRIC, 북미 변압기 수주 잇따라…전력기기 모멘텀 지속
+   내용: HD현대일렉트릭(267260)이 미국 전력망 현대화 프로젝트 수주를 연달아 발표했다.
+   LS ELECTRIC(010120)도 북미·유럽 데이터센터향 전력기기 공급 계약을 체결하며
+   실적 기대감이 커지고 있다.
 
-3. 날짜: 2026-05-26
-   제목: 조선 업황 개선 기대 지속, LNG선과 친환경 선박 발주 주목
-   내용: 주요 조선사의 수주 잔고가 높은 수준을 유지하고 있으며 LNG 운반선,
-   친환경 선박 관련 기자재 기업도 함께 주목받고 있다. 원자재 가격과 환율은
-   수익성 변수로 거론된다.
+3. 날짜: 2026-05-27
+   제목: HD한국조선해양·한화오션, LNG선 발주 급증…수주 잔고 사상 최대
+   내용: HD한국조선해양(009540)이 카타르 LNG 운반선 추가 발주 계약을 체결했다.
+   한화오션(042660)도 친환경 암모니아 추진선 수주에 성공하며 조선업 슈퍼사이클
+   기대감이 높아지고 있다. 원자재 가격 변동이 리스크로 지목된다.
 
-4. 날짜: 2026-05-26
-   제목: 바이오 업종, 기술이전 및 임상 결과 발표 기대감 혼재
-   내용: 일부 바이오 기업이 글로벌 학회와 임상 데이터 발표를 앞두고 관심을
-   받고 있으나, 임상 실패 가능성과 자금 조달 리스크에 대한 주의가 필요하다.
+4. 날짜: 2026-05-27
+   제목: 삼성바이오로직스·셀트리온, 글로벌 CMO·바이오시밀러 수요 확대
+   내용: 삼성바이오로직스(207940)가 글로벌 빅파마와 대규모 위탁생산 계약을 체결했으며
+   셀트리온(068270)도 유럽 바이오시밀러 시장 점유율을 높이고 있다.
 """.strip()
 
 
@@ -872,10 +880,153 @@ def analyze_news_with_gemini(news_data: str) -> dict:
         sys.exit(1)
 
 
+def _get_project_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def save_analysis_to_db(result: dict[str, Any], news_data: str = "") -> int | None:
+    """Save Gemini analysis result to DB. Returns analysis_id or None on error."""
+    try:
+        proj_root = _get_project_root()
+        if str(proj_root) not in sys.path:
+            sys.path.insert(0, str(proj_root))
+        from src.db.database import add_stock, save_llm_analysis, save_stock_recommendation
+
+        model_name = os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
+        analysis_id = save_llm_analysis(
+            model_name=model_name,
+            input_summary=(news_data[:500] if news_data else "auto"),
+            response=result,
+        )
+
+        for rec in result.get("recommendations", []):
+            stock_code = str(rec.get("stock_code", "")).strip()
+            stock_name = str(rec.get("stock_name", "")).strip()
+            market_raw = str(rec.get("market", "KOSPI")).strip().upper()
+            rank_no = int(rec.get("rank", 0))
+            reason = str(rec.get("reason", "")).strip()
+            confidence_str = str(rec.get("confidence", "중")).strip()
+
+            if not stock_name:
+                continue
+            if not stock_code:
+                stock_code = f"TBD_{rank_no}"
+
+            market_enum = market_raw if market_raw in ("KOSPI", "KOSDAQ", "NASDAQ", "NYSE") else "OTHER"
+            stock_id = add_stock(stock_code, stock_name, market_enum)
+
+            confidence_map = {"상": 0.8, "중": 0.5, "하": 0.2}
+            confidence_value = confidence_map.get(confidence_str, 0.5)
+            recommendation = "BUY" if confidence_str == "상" else "WATCH"
+
+            save_stock_recommendation(
+                analysis_id=analysis_id,
+                stock_id=stock_id,
+                rank_no=rank_no,
+                recommendation=recommendation,
+                reason=reason,
+                confidence=confidence_value,
+            )
+
+        print(f"DB 저장 완료: analysis_id={analysis_id}")
+        return analysis_id
+    except Exception as exc:
+        print(f"DB 저장 중 오류 (분석 결과는 정상 반환): {exc}")
+        return None
+
+
+async def _run_scheduled_analysis() -> None:
+    """서버 시작 시 즉시 한 번 실행 후 10분마다 반복."""
+    loop = asyncio.get_event_loop()
+    while True:
+        try:
+            print("[스케줄러] AI 분석 시작...")
+            news_data = await loop.run_in_executor(None, fetch_ls_news)
+            if not news_data.strip():
+                news_data = get_sample_news_data()
+            result = await loop.run_in_executor(None, analyze_news_with_gemini, news_data)
+            save_analysis_to_db(result, news_data)
+            print("[스케줄러] 분석 완료. 다음 실행까지 10분 대기.")
+        except Exception as exc:
+            print(f"[스케줄러] 오류: {exc}")
+        await asyncio.sleep(600)
+
+
+async def _subscribe_market_index(access_token: str, tr_key: str, market: str) -> None:
+    """IJ_ WebSocket TR을 구독해 실시간 지수 데이터를 _market_indices에 저장."""
+    try:
+        import websockets
+    except ImportError:
+        print("[지수] websockets 패키지가 없습니다. pip install websockets")
+        return
+
+    ws_url = os.getenv("LS_NEWS_WS_URL", LS_DEFAULT_NEWS_WS_URL).strip() or LS_DEFAULT_NEWS_WS_URL
+    ssl_context = ssl._create_unverified_context()
+    subscribe_message = {
+        "header": {"token": access_token, "tr_type": "3"},
+        "body": {"tr_cd": "IJ_", "tr_key": tr_key},
+    }
+
+    while True:
+        try:
+            async with websockets.connect(
+                ws_url, ssl=ssl_context, ping_interval=20, close_timeout=5
+            ) as ws:
+                await ws.send(json.dumps(subscribe_message))
+                print(f"[지수] IJ_ 구독 시작. market={market}, tr_key={tr_key}")
+                async for raw in ws:
+                    try:
+                        msg = json.loads(raw)
+                    except json.JSONDecodeError:
+                        continue
+                    body = msg.get("body", {}) if isinstance(msg, dict) else {}
+                    if not isinstance(body, dict):
+                        continue
+                    jisu = body.get("jisu")
+                    if not jisu:
+                        continue
+                    _market_indices[market] = {
+                        "value": str(jisu).strip(),
+                        "drate": str(body.get("drate", "0")).strip(),
+                        "sign": str(body.get("sign", "3")).strip(),
+                        "change": str(body.get("change", "0")).strip(),
+                        "updated_at": datetime.now().isoformat(),
+                    }
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"[지수] {market} WebSocket 오류: {exc}. 10초 후 재연결...")
+            await asyncio.sleep(10)
+
+
+async def _run_market_indices() -> None:
+    """KOSPI(001) + KOSDAQ(101) IJ_ WebSocket 구독을 시작."""
+    app_key = os.getenv("LS_APP_KEY", "").strip()
+    app_secret = os.getenv("LS_APP_SECRET", "").strip()
+    if _is_missing_env_value(app_key) or _is_missing_env_value(app_secret):
+        print("[지수] LS_APP_KEY/SECRET 미설정. 지수 실시간 데이터를 건너뜁니다.")
+        return
+
+    access_token = os.getenv("LS_ACCESS_TOKEN", "").strip()
+    if not access_token:
+        loop = asyncio.get_event_loop()
+        access_token = await loop.run_in_executor(None, fetch_ls_access_token, app_key, app_secret)
+
+    if not access_token:
+        print("[지수] 토큰 발급 실패. 지수 실시간 데이터를 건너뜁니다.")
+        return
+
+    await asyncio.gather(
+        _subscribe_market_index(access_token, "001", "kospi"),
+        _subscribe_market_index(access_token, "101", "kosdaq"),
+    )
+
+
 def create_web_app():
     """Create a FastAPI app for frontend/browser integration."""
     try:
-        from fastapi import FastAPI, HTTPException
+        from fastapi import APIRouter, FastAPI, HTTPException
+        from fastapi.middleware.cors import CORSMiddleware
         from pydantic import BaseModel, Field
     except ImportError as exc:
         raise RuntimeError(
@@ -897,11 +1048,62 @@ def create_web_app():
             description="Gemini 호출 없이 고정 JSON 응답을 반환할지 여부입니다.",
         )
 
+    class PortfolioRequest(BaseModel):
+        user_id: str
+        stock_code: str
+        stock_name: str | None = Field(default=None)
+
+    class PortfolioDeleteRequest(BaseModel):
+        user_id: str
+        stock_code: str
+
+    class RegisterRequest(BaseModel):
+        id: str
+        password: str
+        email: str
+        nickname: str
+
+    class LoginRequest(BaseModel):
+        id: str
+        password: str
+
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def lifespan(app):
+        task1 = asyncio.create_task(_run_scheduled_analysis())
+        task2 = asyncio.create_task(_run_market_indices())
+        yield
+        task1.cancel()
+        task2.cancel()
+        for task in (task1, task2):
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
     app = FastAPI(
         title="LS Securities News Gemini Analyzer",
         description="LS증권 뉴스 또는 입력 뉴스를 Gemini로 분석해 JSON 종목 추천 결과를 반환합니다.",
         version="1.0.0",
+        lifespan=lifespan,
     )
+
+    cors_origins_text = os.getenv(
+        "CORS_ALLOW_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173",
+    )
+    cors_origins = [origin.strip() for origin in cors_origins_text.split(",") if origin.strip()]
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+    router = APIRouter(prefix="/api")
 
     @app.get("/")
     def root() -> dict[str, str]:
@@ -913,14 +1115,18 @@ def create_web_app():
         }
 
     @app.get("/health")
+    @router.get("/health")
     def health_check() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.post("/analyze")
+    @router.post("/analyze")
     def analyze(request: AnalyzeRequest) -> dict[str, Any]:
         try:
             if request.use_dummy_ai:
-                return get_dummy_analysis_result()
+                result = get_dummy_analysis_result()
+                save_analysis_to_db(result)
+                return result
 
             selected_news_data = (request.news_data or "").strip()
 
@@ -939,7 +1145,9 @@ def create_web_app():
                     ),
                 )
 
-            return analyze_news_with_gemini(selected_news_data)
+            result = analyze_news_with_gemini(selected_news_data)
+            save_analysis_to_db(result, selected_news_data)
+            return result
 
         except HTTPException:
             raise
@@ -948,8 +1156,91 @@ def create_web_app():
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"분석 처리 중 오류가 발생했습니다: {exc}") from exc
 
+    @app.get("/recommendations/latest")
+    def get_latest_recommendations() -> dict[str, Any]:
+        try:
+            proj_root = _get_project_root()
+            if str(proj_root) not in sys.path:
+                sys.path.insert(0, str(proj_root))
+            from src.db.database import get_latest_analysis_json
+            result = get_latest_analysis_json()
+            if not result:
+                raise HTTPException(
+                    status_code=404,
+                    detail="저장된 분석 결과가 없습니다. /analyze 를 먼저 호출해 주세요.",
+                )
+            return result
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"DB 조회 중 오류: {exc}") from exc
+
+    @app.get("/market/indices")
+    async def get_market_indices() -> dict[str, Any]:
+        return _market_indices
+
+    @app.post("/portfolio")
+    def add_to_portfolio(request: PortfolioRequest) -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.delete("/portfolio")
+    def remove_from_portfolio(request: PortfolioDeleteRequest) -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.post("/register")
+    def register(request: RegisterRequest) -> dict[str, Any]:
+        import hashlib
+        try:
+            proj_root = _get_project_root()
+            if str(proj_root) not in sys.path:
+                sys.path.insert(0, str(proj_root))
+            from src.db.database import add_user
+            password_hash = hashlib.sha256(request.password.encode()).hexdigest()
+            user_id = add_user(
+                username=request.id,
+                email=request.email,
+                password_hash=password_hash,
+            )
+            return {"status": "ok", "user_id": user_id, "message": "회원가입이 완료되었습니다."}
+        except Exception as exc:
+            error_msg = str(exc)
+            if "Duplicate entry" in error_msg:
+                raise HTTPException(status_code=409, detail={"message": "이미 사용 중인 아이디 또는 이메일입니다."})
+            raise HTTPException(status_code=500, detail={"message": f"회원가입에 실패했습니다: {exc}"})
+
+    @app.post("/login")
+    def login(request: LoginRequest) -> dict[str, Any]:
+        import hashlib
+        try:
+            proj_root = _get_project_root()
+            if str(proj_root) not in sys.path:
+                sys.path.insert(0, str(proj_root))
+            from src.db.database import get_user_by_username
+            user = get_user_by_username(request.id)
+            if not user:
+                raise HTTPException(status_code=401, detail={"message": "아이디 또는 비밀번호가 올바르지 않습니다."})
+            password_hash = hashlib.sha256(request.password.encode()).hexdigest()
+            if user["password_hash"] != password_hash:
+                raise HTTPException(status_code=401, detail={"message": "아이디 또는 비밀번호가 올바르지 않습니다."})
+            return {
+                "status": "ok",
+                "user_id": str(user["user_id"]),
+                "username": user["username"],
+                "email": user["email"],
+            }
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail={"message": f"로그인 오류: {exc}"})
+
+    app.include_router(router)
     return app
 
+
+
+
+# ASGI entrypoint. This enables: uvicorn AI:app --reload
+app = create_web_app()
 
 def run_web_server() -> None:
     """Run FastAPI web server with uvicorn."""
@@ -969,7 +1260,7 @@ def run_web_server() -> None:
         print(f"WEB_PORT 값이 숫자가 아닙니다: {port_text}. 기본값 8000을 사용합니다.")
         port = 8000
 
-    uvicorn.run(create_web_app(), host=host, port=port)
+    uvicorn.run(app, host=host, port=port)
 
 
 def main() -> None:
@@ -997,6 +1288,7 @@ def main() -> None:
         news_data = get_sample_news_data()
 
     result = analyze_news_with_gemini(news_data)
+    save_analysis_to_db(result, news_data)
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 

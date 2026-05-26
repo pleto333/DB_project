@@ -215,6 +215,49 @@ def get_latest_recommendations_json() -> dict[str, Any]:
     return get_recommendations_json(analysis_id)
 
 
+def get_user_by_username(username: str) -> dict[str, Any] | None:
+    """Return user row by username, or None if not found."""
+    sql = "SELECT user_id, username, email, password_hash FROM users WHERE username = %s"
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(sql, (username,))
+        return cursor.fetchone()
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_latest_analysis_json() -> dict[str, Any]:
+    """Return full Gemini response JSON from the latest llm_analysis row."""
+    sql = """
+        SELECT analysis_id, response_json, analyzed_at
+        FROM llm_analysis
+        ORDER BY analyzed_at DESC, analysis_id DESC
+        LIMIT 1
+    """
+
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(sql)
+        row = cursor.fetchone()
+        if row is None:
+            return {}
+        response_json = row.get("response_json")
+        if isinstance(response_json, str):
+            response_json = json.loads(response_json)
+        return {
+            "analysis_id": row["analysis_id"],
+            "analyzed_at": str(row["analyzed_at"]),
+            **(response_json or {}),
+        }
+    finally:
+        cursor.close()
+        conn.close()
+
+
 if __name__ == "__main__":
     try:
         result = get_latest_recommendations_json()

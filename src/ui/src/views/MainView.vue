@@ -74,15 +74,15 @@
               <div class="summary-cards">
                 <div class="summary-card">
                   <p class="card-label">추천 종목</p>
-                  <p class="card-value">5<span class="card-unit">개</span></p>
+                  <p class="card-value">{{ recommendedStocks.length }}<span class="card-unit">개</span></p>
                 </div>
                 <div class="summary-card">
-                  <p class="card-label">분석 뉴스</p>
-                  <p class="card-value">128<span class="card-unit">건</span></p>
+                  <p class="card-label">핵심 테마</p>
+                  <p class="card-value">{{ topThemesCount }}<span class="card-unit">개</span></p>
                 </div>
                 <div class="summary-card">
                   <p class="card-label">업데이트</p>
-                  <p class="card-value updated">방금</p>
+                  <p class="card-value updated">{{ analysisUpdatedAt }}</p>
                 </div>
               </div>
               <p class="section-title">추천 종목</p>
@@ -119,8 +119,8 @@
                 <div class="market-card-header">
                   <div>
                     <span class="market-badge kospi">KOSPI</span>
-                    <p class="market-value">2,623.45</p>
-                    <p class="market-change up">▲ 0.87%</p>
+                    <p class="market-value">{{ kospiDisplay.value }}</p>
+                    <p :class="['market-change', kospiDisplay.isUp ? 'up' : 'down']">{{ kospiDisplay.drate }}</p>
                   </div>
                   <svg width="100" height="50" viewBox="0 0 100 50" class="market-chart">
                     <defs>
@@ -144,26 +144,26 @@
               <div class="market-card">
                 <div class="market-card-header">
                   <div>
-                    <span class="market-badge nasdaq">NASDAQ</span>
-                    <p class="market-value">19,245.30</p>
-                    <p class="market-change up">▲ 1.24%</p>
+                    <span class="market-badge kosdaq">KOSDAQ</span>
+                    <p class="market-value">{{ kosdaqDisplay.value }}</p>
+                    <p :class="['market-change', kosdaqDisplay.isUp ? 'up' : 'down']">{{ kosdaqDisplay.drate }}</p>
                   </div>
                   <svg width="100" height="50" viewBox="0 0 100 50" class="market-chart">
                     <defs>
-                      <linearGradient id="nasdaqGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stop-color="#2563eb" stop-opacity="0.2"/>
-                        <stop offset="100%" stop-color="#2563eb" stop-opacity="0"/>
+                      <linearGradient id="kosdaqGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#16a34a" stop-opacity="0.2"/>
+                        <stop offset="100%" stop-color="#16a34a" stop-opacity="0"/>
                       </linearGradient>
                     </defs>
-                    <polygon points="0,45 10,40 20,42 30,35 40,32 50,28 60,20 70,22 80,12 90,8 100,5 100,50 0,50" fill="url(#nasdaqGrad)"/>
+                    <polygon points="0,45 10,40 20,42 30,35 40,32 50,28 60,20 70,22 80,12 90,8 100,5 100,50 0,50" fill="url(#kosdaqGrad)"/>
                     <polyline points="0,45 10,40 20,42 30,35 40,32 50,28 60,20 70,22 80,12 90,8 100,5"
-                      fill="none" stroke="#2563eb" stroke-width="2" stroke-linejoin="round"/>
+                      fill="none" stroke="#16a34a" stroke-width="2" stroke-linejoin="round"/>
                   </svg>
                 </div>
                 <div class="market-news-list">
                   <p class="news-section-label">주요 뉴스</p>
-                  <div class="market-news-item" v-for="n in nasdaqNews" :key="n.id">
-                    <span class="news-dot blue"></span><span>{{ n.title }}</span>
+                  <div class="market-news-item" v-for="n in kosdaqNews" :key="n.id">
+                    <span class="news-dot green"></span><span>{{ n.title }}</span>
                   </div>
                 </div>
               </div>
@@ -177,12 +177,17 @@
             <h2 class="page-title">최신 뉴스</h2>
             <p class="page-sub">LS증권 뉴스 API 실시간 데이터</p>
           </div>
-          <div class="news-list">
+          <div class="news-list" v-if="newsList.length > 0">
             <div class="news-card" v-for="news in newsList" :key="news.id">
               <div class="news-tag">{{ news.tag }}</div>
               <p class="news-title">{{ news.title }}</p>
               <p class="news-time">{{ news.time }}</p>
             </div>
+          </div>
+          <div v-else class="empty-state">
+            <p>📰</p>
+            <p>뉴스 데이터를 불러오는 중입니다</p>
+            <p class="empty-sub">AI 분석이 완료되면 자동으로 표시됩니다</p>
           </div>
         </div>
 
@@ -271,19 +276,30 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
 import { useRouter } from 'vue-router'
 const router = useRouter()
 
-// stock-card 클릭 이벤트에 추가
 function goToDetail(code) {
   router.push(`/stock/${code}`)
 }
 
-const BASE_URL = 'http://localhost:5000'
+const BASE_URL = 'http://localhost:8080'
 
 const currentTab = ref('recommend')
+
+const topThemesCount = ref('-')
+const analysisUpdatedAt = ref('로딩 중')
+
+function timeAgo(dateStr) {
+  if (!dateStr) return '-'
+  const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000)
+  if (diff < 60) return '방금'
+  if (diff < 3600) return `${Math.floor(diff / 60)}분 전`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`
+  return `${Math.floor(diff / 86400)}일 전`
+}
 const sidebarOpen = ref(false)
 const username = ref('홍길동')       // TODO: 로그인 응답에서 받아오기
 const userId = ref('hong123')        // TODO: 로그인 응답에서 받아오기
@@ -405,23 +421,112 @@ const kospiNews = ref([
   { id: 2, title: '삼성전자 52주 신고가 경신' },
   { id: 3, title: '코스피 2,650 돌파 시도' },
 ])
-const nasdaqNews = ref([
-  { id: 1, title: '엔비디아 시총 3조달러 돌파' },
-  { id: 2, title: 'Fed 금리 동결 가능성 85%' },
-  { id: 3, title: '빅테크 실적 서프라이즈' },
+const kosdaqNews = ref([
+  { id: 1, title: '이차전지·바이오 테마 강세' },
+  { id: 2, title: '코스닥 외국인 순매수 지속' },
+  { id: 3, title: '중소형 성장주 관심 확대' },
 ])
-const newsList = ref([
-  { id: 1, tag: '반도체', title: '삼성전자, 3분기 영업이익 전망치 상향 조정', time: '5분 전' },
-  { id: 2, tag: 'AI', title: '네이버 하이퍼클로바X, 기업 고객 500곳 돌파', time: '12분 전' },
-  { id: 3, tag: '배터리', title: 'LG에너지솔루션, 북미 공장 추가 증설 계획 발표', time: '30분 전' },
-  { id: 4, tag: '핀테크', title: '카카오페이, 해외 결제 서비스 본격 확대', time: '1시간 전' },
-  { id: 5, tag: '반도체', title: 'SK하이닉스 HBM4 양산 일정 앞당겨', time: '2시간 전' },
-])
+
+// 지수 실시간 데이터
+const kospiData = ref(null)
+const kosdaqData = ref(null)
+
+function formatIndexDisplay(data) {
+  if (!data || !data.value) return { value: '-', drate: '-', isUp: true }
+  const sign = data.sign || '3'
+  const isUp = sign === '1' || sign === '2'
+  const drateNum = parseFloat(data.drate || '0')
+  const valueNum = parseFloat(data.value)
+  const valueStr = isNaN(valueNum)
+    ? data.value
+    : valueNum.toLocaleString('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return {
+    value: valueStr,
+    drate: `${isUp ? '▲' : '▼'} ${Math.abs(drateNum).toFixed(2)}%`,
+    isUp,
+  }
+}
+
+const kospiDisplay = computed(() => formatIndexDisplay(kospiData.value))
+const kosdaqDisplay = computed(() => formatIndexDisplay(kosdaqData.value))
+
+async function loadMarketIndices() {
+  try {
+    const res = await axios.get(`${BASE_URL}/market/indices`)
+    const data = res.data
+    if (data.kospi?.value) {
+      kospiData.value = data.kospi
+      const d = formatIndexDisplay(data.kospi)
+      const isUp = data.kospi.sign === '1' || data.kospi.sign === '2'
+      const drate = parseFloat(data.kospi.drate || '0')
+      tickerItems.value = tickerItems.value.map((item, i) =>
+        i === 0 ? { name: 'KOSPI', value: d.value, change: isUp ? drate : -drate } : item
+      )
+    }
+    if (data.kosdaq?.value) {
+      kosdaqData.value = data.kosdaq
+      const d = formatIndexDisplay(data.kosdaq)
+      const isUp = data.kosdaq.sign === '1' || data.kosdaq.sign === '2'
+      const drate = parseFloat(data.kosdaq.drate || '0')
+      tickerItems.value = tickerItems.value.map((item, i) =>
+        i === 1 ? { name: 'KOSDAQ', value: d.value, change: isUp ? drate : -drate } : item
+      )
+    }
+  } catch (_) {}
+}
+const newsList = ref([])
 
 function handleLogout() {
   alert('로그아웃 되었습니다.')
   // TODO: router.push('/')
 }
+
+async function loadRecommendations() {
+  try {
+    const res = await axios.get(`${BASE_URL}/recommendations/latest`)
+    const data = res.data
+    if (data && Array.isArray(data.recommendations) && data.recommendations.length > 0) {
+      const updatedAt = timeAgo(data.analyzed_at)
+      recommendedStocks.value = data.recommendations.map(r => ({
+        rank: r.rank,
+        name: r.stock_name,
+        code: r.stock_code || String(r.rank),
+        price: '-',
+        change: 0,
+        reason: r.reason || r.news_evidence || '',
+        sparkline: '0,20 10,18 20,22 30,15 40,12 50,10 60,6',
+      }))
+      topThemesCount.value = Array.isArray(data.top_themes) ? data.top_themes.length : '-'
+      analysisUpdatedAt.value = updatedAt
+
+      const items = []
+      if (data.overall_market_summary) {
+        items.push({ id: 0, tag: '시장요약', title: data.overall_market_summary, time: updatedAt })
+      }
+      data.recommendations.forEach(r => {
+        if (r.news_evidence) {
+          items.push({ id: r.rank, tag: r.theme || '분석', title: r.news_evidence, time: updatedAt })
+        }
+      })
+      if (items.length > 0) newsList.value = items
+    }
+  } catch (_) {}
+}
+
+let refreshTimer = null
+let indicesTimer = null
+
+onMounted(async () => {
+  await loadRecommendations()
+  await loadMarketIndices()
+  refreshTimer = setInterval(loadRecommendations, 60 * 1000)
+  indicesTimer = setInterval(loadMarketIndices, 30 * 1000)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
+  if (indicesTimer) clearInterval(indicesTimer)
+})
 </script>
 
 <style scoped>
@@ -533,6 +638,7 @@ function handleLogout() {
 .market-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; margin-bottom: 6px; }
 .market-badge.kospi { background: #fef2f2; color: #ef4444; }
 .market-badge.nasdaq { background: #eff6ff; color: #2563eb; }
+.market-badge.kosdaq { background: #f0fdf4; color: #16a34a; }
 .market-value { font-size: 20px; font-weight: 700; }
 .market-change { font-size: 13px; font-weight: 600; }
 .market-change.up { color: #ef4444; }
@@ -542,6 +648,7 @@ function handleLogout() {
 .news-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
 .news-dot.red { background: #ef4444; }
 .news-dot.blue { background: #2563eb; }
+.news-dot.green { background: #16a34a; }
 
 /* 검색창 */
 .search-box { position: relative; margin-bottom: 20px; }

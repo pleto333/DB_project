@@ -137,7 +137,7 @@ import axios from 'axios'
 
 const route = useRoute()
 const router = useRouter()
-const BASE_URL = 'http://localhost:5000'
+const BASE_URL = 'http://localhost:8080'
 
 const isAdded = ref(false)
 
@@ -173,9 +173,41 @@ const stock = ref({
 })
 
 onMounted(async () => {
-  // TODO: 백엔드 API 연동
-  // const res = await axios.get(`${BASE_URL}/stocks/${route.params.code}/analysis`)
-  // stock.value = res.data
+  try {
+    const res = await axios.get(`${BASE_URL}/recommendations/latest`)
+    const data = res.data
+    if (!data || !data.recommendations) return
+
+    const rec = data.recommendations.find(r =>
+      r.stock_code === route.params.code || String(r.rank) === route.params.code
+    )
+    if (!rec) return
+
+    const confidenceMap = { '상': 85, '중': 60, '하': 35 }
+    stock.value = {
+      name: rec.stock_name,
+      code: rec.stock_code,
+      price: '-',
+      change: 0,
+      recommend: rec.confidence !== '하',
+      confidence: confidenceMap[rec.confidence] ?? 60,
+      summary: rec.reason,
+      positives: [rec.expected_momentum].filter(Boolean),
+      negatives: [rec.risk].filter(Boolean),
+      detailAnalysis: rec.reason + (rec.news_evidence ? '\n\n[분석 근거] ' + rec.news_evidence : ''),
+      chartLine: '0,50 20,45 40,48 60,35 80,30 100,25 120,20 140,15 160,10',
+      areaLine: '0,50 20,45 40,48 60,35 80,30 100,25 120,20 140,15 160,10 160,60 0,60',
+      relatedNews: rec.news_evidence ? [{
+        id: 1,
+        sentiment: rec.confidence === '하' ? 'negative' : 'positive',
+        time: data.analysis_date || '-',
+        title: `[${rec.theme}] ${rec.stock_name} 분석 근거`,
+        desc: rec.news_evidence,
+      }] : [],
+    }
+  } catch (_) {
+    // DB 미연결 시 더미 데이터 유지
+  }
 })
 
 async function togglePortfolio() {

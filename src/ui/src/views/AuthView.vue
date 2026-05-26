@@ -65,8 +65,10 @@
 <script setup>
 import { ref, computed } from 'vue'
 import axios from 'axios'
+import { useRouter } from 'vue-router'
 
-const BASE_URL = 'http://localhost:5000'
+const router = useRouter()
+const BASE_URL = 'http://localhost:8080'
 
 const mode = ref('login')
 
@@ -92,9 +94,9 @@ async function handleLogin() {
       password: loginForm.value.password
     })
     console.log('로그인 성공:', response.data)
-    // TODO: router.push('/main')
+    router.push('/main')
   } catch (error) {
-    loginError.value = error.response?.data?.message || '아이디 또는 비밀번호가 올바르지 않습니다.'
+    loginError.value = error.response?.data?.detail?.message || error.response?.data?.message || '아이디 또는 비밀번호가 올바르지 않습니다.'
   } finally {
     loginLoading.value = false
   }
@@ -115,7 +117,7 @@ async function handleRegister() {
     registerSuccess.value = '회원가입이 완료되었습니다! 로그인해주세요.'
     setTimeout(() => { mode.value = 'login' }, 1500)
   } catch (error) {
-    registerError.value = error.response?.data?.message || '회원가입에 실패했습니다. 다시 시도해주세요.'
+    registerError.value = error.response?.data?.detail?.message || error.response?.data?.message || '회원가입에 실패했습니다. 다시 시도해주세요.'
   } finally {
     registerLoading.value = false
   }
