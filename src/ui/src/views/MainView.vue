@@ -461,14 +461,24 @@ async function loadGlobalIndices() {
   try {
     const res = await axios.get(`${BASE_URL}/market/global`)
     const data = res.data
+
     tickerItems.value = tickerItems.value.map(item => {
       const d = data[item.name]
       if (!d) return item
-      // KOSPI/KOSDAQ는 LS 실시간 데이터가 있으면 덮어쓰지 않음
       if (item.name === 'KOSPI' && kospiData.value?.value) return item
       if (item.name === 'KOSDAQ' && kosdaqData.value?.value) return item
       return { ...item, value: formatGlobalPrice(item.name, d.price), change: d.change }
     })
+
+    // 마켓 카드: LS 실시간 없을 때 yfinance 종가로 표시
+    if (!kospiData.value?.value && data['KOSPI']) {
+      const d = data['KOSPI']
+      kospiData.value = { value: String(d.price), drate: String(Math.abs(d.change)), sign: d.change >= 0 ? '2' : '5', change: String(Math.abs(d.change)) }
+    }
+    if (!kosdaqData.value?.value && data['KOSDAQ']) {
+      const d = data['KOSDAQ']
+      kosdaqData.value = { value: String(d.price), drate: String(Math.abs(d.change)), sign: d.change >= 0 ? '2' : '5', change: String(Math.abs(d.change)) }
+    }
   } catch (_) {}
 }
 
