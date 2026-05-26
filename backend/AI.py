@@ -19,6 +19,7 @@ Required packages:
     LS_NEWS_WS_TIMEOUT=30
     LS_NEWS_WS_SSL_VERIFY=false
     LS_NEWS_MAX_ATTEMPTS=5
+    USE_DUMMY_AI=false
     USE_SAMPLE_NEWS=false
     LS_NEWS_HOT_CODE=2023051510383935PL7HQ87D
     LS_NEWS_DATE=20230515
@@ -90,6 +91,83 @@ def get_sample_news_data() -> str:
    내용: 일부 바이오 기업이 글로벌 학회와 임상 데이터 발표를 앞두고 관심을
    받고 있으나, 임상 실패 가능성과 자금 조달 리스크에 대한 주의가 필요하다.
 """.strip()
+
+
+def get_dummy_analysis_result() -> dict[str, Any]:
+    """Return a fixed response for teammates without LS/Gemini API keys."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    return {
+        "analysis_date": today,
+        "top_themes": [
+            "AI 반도체",
+            "전력 인프라",
+            "조선",
+        ],
+        "recommendations": [
+            {
+                "rank": 1,
+                "stock_name": "SK하이닉스",
+                "stock_code": "000660",
+                "market": "KOSPI",
+                "theme": "AI 반도체/HBM",
+                "reason": "더미 뉴스에서 AI 서버 투자 확대와 HBM 수요 증가가 언급되어 관련 모멘텀 예시로 선정했습니다.",
+                "news_evidence": "AI 서버 투자 확대와 고대역폭 메모리 수요 증가 관련 예시 뉴스",
+                "expected_momentum": "HBM 수요 확대 기대에 따른 단기 관심 증가",
+                "risk": "반도체 업황 변동성과 단기 급등 부담",
+                "confidence": "상",
+            },
+            {
+                "rank": 2,
+                "stock_name": "LS ELECTRIC",
+                "stock_code": "010120",
+                "market": "KOSPI",
+                "theme": "전력 인프라",
+                "reason": "데이터센터 전력 수요와 전력기기 수주 기대를 반영한 더미 추천입니다.",
+                "news_evidence": "데이터센터와 재생에너지 설비 증가로 전력망 증설 필요성 부각",
+                "expected_momentum": "전력기기 수주 기대에 따른 시장 관심",
+                "risk": "원자재 가격, 환율, 수주 지연 가능성",
+                "confidence": "상",
+            },
+            {
+                "rank": 3,
+                "stock_name": "HD한국조선해양",
+                "stock_code": "009540",
+                "market": "KOSPI",
+                "theme": "조선/LNG선",
+                "reason": "LNG선 및 친환경 선박 발주 기대를 반영한 예시 결과입니다.",
+                "news_evidence": "조선 업황 개선과 높은 수주잔고 관련 예시 뉴스",
+                "expected_momentum": "수주잔고와 친환경 선박 발주 기대",
+                "risk": "후판 가격, 환율, 선가 변동",
+                "confidence": "중",
+            },
+            {
+                "rank": 4,
+                "stock_name": "한미반도체",
+                "stock_code": "042700",
+                "market": "KOSDAQ",
+                "theme": "첨단 패키징",
+                "reason": "HBM 생산 확대에 필요한 장비 수요 증가를 가정한 더미 추천입니다.",
+                "news_evidence": "첨단 패키징 장비 기업 관심 확대 예시 뉴스",
+                "expected_momentum": "AI 반도체 투자 확대에 따른 장비 수요",
+                "risk": "고객사 투자 속도와 반도체 장비 사이클 변동",
+                "confidence": "중",
+            },
+            {
+                "rank": 5,
+                "stock_name": "삼성SDS",
+                "stock_code": "018260",
+                "market": "KOSPI",
+                "theme": "AI/클라우드",
+                "reason": "기업의 AI 도입과 클라우드 전환 수요 증가를 반영한 더미 추천입니다.",
+                "news_evidence": "기업 생산성 향상을 위한 AI 솔루션 도입 확대 예시 뉴스",
+                "expected_momentum": "AI 기반 업무 자동화 및 클라우드 수요 증가",
+                "risk": "IT 투자 지연, 경쟁 심화",
+                "confidence": "중",
+            },
+        ],
+        "overall_market_summary": "이 응답은 LS증권/Gemini 키 없이 화면과 JSON 연동을 확인하기 위한 더미 데이터입니다.",
+        "disclaimer": "이 결과는 더미 데이터 기반 예시이며 매수·매도 추천이 아닙니다.",
+    }
 
 
 def _compact_json(data: Any, max_chars: int = MAX_FALLBACK_JSON_CHARS) -> str:
@@ -796,6 +874,11 @@ def analyze_news_with_gemini(news_data: str) -> dict:
 
 def main() -> None:
     load_dotenv(PROJECT_ROOT / ".env", override=True)
+
+    if _env_flag("USE_DUMMY_AI", default=False):
+        result = get_dummy_analysis_result()
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
 
     news_data = fetch_ls_news()
     if not news_data.strip():
