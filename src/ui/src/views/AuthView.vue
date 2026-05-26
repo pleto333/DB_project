@@ -94,6 +94,8 @@ async function handleLogin() {
       password: loginForm.value.password
     })
     console.log('로그인 성공:', response.data)
+    localStorage.setItem('user_id', response.data.user_id)
+    localStorage.setItem('username', response.data.username)
     router.push('/main')
   } catch (error) {
     loginError.value = error.response?.data?.detail?.message || error.response?.data?.message || '아이디 또는 비밀번호가 올바르지 않습니다.'

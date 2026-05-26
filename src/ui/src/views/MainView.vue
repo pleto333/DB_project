@@ -301,8 +301,8 @@ function timeAgo(dateStr) {
   return `${Math.floor(diff / 86400)}일 전`
 }
 const sidebarOpen = ref(false)
-const username = ref('홍길동')       // TODO: 로그인 응답에서 받아오기
-const userId = ref('hong123')        // TODO: 로그인 응답에서 받아오기
+const username = ref(localStorage.getItem('username') || '사용자')
+const userId = ref(localStorage.getItem('user_id') || '')
 const userInitial = computed(() => username.value.charAt(0))
 
 // ── 검색 ──
@@ -367,6 +367,7 @@ async function addToPortfolio(stock) {
       stock_name: stock.name
     })
     portfolio.value.push({ ...stock })
+    loadAllPrices()
     showMessage(`${stock.name}을(를) 포트폴리오에 추가했습니다`, 'success')
     searchQuery.value = ''
     searchResults.value = []
@@ -477,8 +478,22 @@ async function loadMarketIndices() {
 const newsList = ref([])
 
 function handleLogout() {
-  alert('로그아웃 되었습니다.')
-  // TODO: router.push('/')
+  localStorage.removeItem('user_id')
+  localStorage.removeItem('username')
+  router.push('/')
+}
+
+async function loadPortfolio() {
+  if (!userId.value) return
+  try {
+    const res = await axios.get(`${BASE_URL}/portfolio`, { params: { user_id: userId.value } })
+    portfolio.value = (res.data.items || []).map(item => ({
+      name: item.stock_name,
+      code: item.stock_code,
+      price: '-',
+      change: 0,
+    }))
+  } catch (_) {}
 }
 
 async function loadRecommendations() {
@@ -499,6 +514,13 @@ async function loadRecommendations() {
       topThemesCount.value = Array.isArray(data.top_themes) ? data.top_themes.length : '-'
       analysisUpdatedAt.value = updatedAt
 
+      // 마켓 카드 뉴스 업데이트
+      const mn = data.market_news
+      if (mn?.kospi?.length > 0)
+        kospiNews.value = mn.kospi.map((t, i) => ({ id: i + 1, title: t }))
+      if (mn?.kosdaq?.length > 0)
+        kosdaqNews.value = mn.kosdaq.map((t, i) => ({ id: i + 1, title: t }))
+
       const items = []
       if (data.overall_market_summary) {
         items.push({ id: 0, tag: '시장요약', title: data.overall_market_summary, time: updatedAt })
@@ -513,12 +535,56 @@ async function loadRecommendations() {
   } catch (_) {}
 }
 
+function calcSparkline(prices) {
+  if (!prices || prices.length < 2) return '0,14 60,14'
+  const min = Math.min(...prices)
+  const max = Math.max(...prices)
+  const range = max - min || 1
+  const pad = 2
+  return prices.map((p, i) => {
+    const x = (i / (prices.length - 1)) * 60
+    const y = pad + (1 - (p - min) / range) * (28 - pad * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+}
+
+async function loadAllPrices() {
+  const recCodes = recommendedStocks.value.filter(s => s.code && !s.code.startsWith('TBD_')).map(s => s.code)
+  const portCodes = portfolio.value.filter(s => s.code && !s.code.startsWith('TBD_')).map(s => s.code)
+  const allCodes = [...new Set([...recCodes, ...portCodes])]
+  if (!allCodes.length) return
+  try {
+    const res = await axios.get(`${BASE_URL}/stocks/price`, { params: { codes: allCodes.join(',') } })
+    const priceData = res.data
+
+    recommendedStocks.value = recommendedStocks.value.map(stock => {
+      const prices = priceData[stock.code]
+      if (!prices || prices.length < 2) return stock
+      const last = prices[prices.length - 1]
+      const prev = prices[prices.length - 2]
+      const change = parseFloat(((last - prev) / prev * 100).toFixed(2))
+      return { ...stock, price: last.toLocaleString('ko-KR') + '원', change, sparkline: calcSparkline(prices) }
+    })
+
+    portfolio.value = portfolio.value.map(stock => {
+      const prices = priceData[stock.code]
+      if (!prices || prices.length < 2) return stock
+      const last = prices[prices.length - 1]
+      const prev = prices[prices.length - 2]
+      const change = parseFloat(((last - prev) / prev * 100).toFixed(2))
+      return { ...stock, price: last.toLocaleString('ko-KR') + '원', change }
+    })
+  } catch (_) {}
+}
+
 let refreshTimer = null
 let indicesTimer = null
 
 onMounted(async () => {
   await loadRecommendations()
   await loadMarketIndices()
+  await loadPortfolio()
+  loadAllPrices()
   refreshTimer = setInterval(loadRecommendations, 60 * 1000)
   indicesTimer = setInterval(loadMarketIndices, 30 * 1000)
 })

@@ -258,6 +258,64 @@ def get_latest_analysis_json() -> dict[str, Any]:
         conn.close()
 
 
+def add_portfolio_item(user_id: int, stock_code: str, stock_name: str) -> int:
+    """Add a stock to user's portfolio. Ignores duplicates."""
+    sql = """
+        INSERT INTO portfolio (user_id, stock_code, stock_name)
+        VALUES (%s, %s, %s)
+        ON DUPLICATE KEY UPDATE portfolio_id = LAST_INSERT_ID(portfolio_id)
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(sql, (user_id, stock_code, stock_name))
+        conn.commit()
+        return cursor.lastrowid
+    except Error:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def remove_portfolio_item(user_id: int, stock_code: str) -> None:
+    """Remove a stock from user's portfolio."""
+    sql = "DELETE FROM portfolio WHERE user_id = %s AND stock_code = %s"
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(sql, (user_id, stock_code))
+        conn.commit()
+    except Error:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_portfolio_by_user(user_id: int) -> list[dict[str, Any]]:
+    """Return all portfolio items for a user."""
+    sql = """
+        SELECT stock_code, stock_name, added_at
+        FROM portfolio
+        WHERE user_id = %s
+        ORDER BY added_at DESC
+    """
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(sql, (user_id,))
+        return [
+            {"stock_code": r["stock_code"], "stock_name": r["stock_name"], "added_at": str(r["added_at"])}
+            for r in cursor.fetchall()
+        ]
+    finally:
+        cursor.close()
+        conn.close()
+
+
 if __name__ == "__main__":
     try:
         result = get_latest_recommendations_json()
