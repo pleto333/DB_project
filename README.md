@@ -26,8 +26,9 @@ mysql -u root -p stock_prediction_db < sql/sample_data.sql
 ```
 
 ### 3. 환경변수 설정
+`.env` 파일이 없을 때만 실행하세요. **이미 있으면 건너뜁니다.**
 ```bash
-cp .env.example .env
+[ ! -f .env ] && cp .env.example .env
 # .env 파일을 열어 DB_HOST, DB_PASSWORD, GEMINI_API_KEY 등 입력
 ```
 
@@ -61,8 +62,9 @@ Get-Content sql/sample_data.sql | mysql -u root -p stock_prediction_db
 ```
 
 ### 3. 환경변수 설정
+`.env` 파일이 없을 때만 실행하세요. **이미 있으면 건너뜁니다.**
 ```powershell
-copy .env.example .env
+if not exist .env copy .env.example .env
 # .env 파일을 열어 DB_HOST, DB_PASSWORD, GEMINI_API_KEY 등 입력
 ```
 
