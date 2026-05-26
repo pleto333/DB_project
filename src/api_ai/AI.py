@@ -2,7 +2,7 @@
 LS Securities news -> Gemini analysis end-to-end sample.
 
 Required packages:
-    pip install google-genai python-dotenv requests websockets
+    pip install google-genai python-dotenv requests websockets fastapi uvicorn
 
 .env.example:
     GEMINI_API_KEY=your_gemini_api_key
@@ -19,7 +19,11 @@ Required packages:
     LS_NEWS_WS_TIMEOUT=30
     LS_NEWS_WS_SSL_VERIFY=false
     LS_NEWS_MAX_ATTEMPTS=5
-    USE_SAMPLE_NEWS=false
+    USE_SAMPLE_NEWS=true
+    USE_DUMMY_AI=false
+    RUN_WEB_SERVER=false
+    WEB_HOST=127.0.0.1
+    WEB_PORT=8000
     LS_NEWS_HOT_CODE=2023051510383935PL7HQ87D
     LS_NEWS_DATE=20230515
     LS_NEWS_TIME=103839
@@ -90,6 +94,80 @@ def get_sample_news_data() -> str:
    내용: 일부 바이오 기업이 글로벌 학회와 임상 데이터 발표를 앞두고 관심을
    받고 있으나, 임상 실패 가능성과 자금 조달 리스크에 대한 주의가 필요하다.
 """.strip()
+
+
+# --- DUMMY ANALYSIS RESULT FOR WEB/API TESTS ---
+def get_dummy_analysis_result() -> dict[str, Any]:
+    """Return a fixed JSON response for web/API integration tests without Gemini."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    return {
+        "analysis_date": today,
+        "top_themes": ["AI 반도체", "전력 인프라", "조선"],
+        "recommendations": [
+            {
+                "rank": 1,
+                "stock_name": "삼성전자",
+                "stock_code": "005930",
+                "market": "KOSPI",
+                "theme": "AI 반도체",
+                "reason": "샘플 뉴스 기준 AI 서버 투자 확대와 반도체 수요 증가 기대가 있습니다.",
+                "news_evidence": "AI 반도체 수요 확대와 HBM 및 첨단 패키징 관련주 관심 뉴스",
+                "expected_momentum": "AI 투자 확대 기대에 따른 단기 관심 증가",
+                "risk": "단기 급등 부담, 업황 변동, 고객사 투자 속도 둔화 가능성",
+                "confidence": "중",
+            },
+            {
+                "rank": 2,
+                "stock_name": "SK하이닉스",
+                "stock_code": "000660",
+                "market": "KOSPI",
+                "theme": "HBM",
+                "reason": "샘플 뉴스 기준 고대역폭 메모리 수요 확대와 직접적으로 연결됩니다.",
+                "news_evidence": "글로벌 빅테크의 AI 서버 투자 확대와 HBM 관심 증가",
+                "expected_momentum": "HBM 수요 기대에 따른 수급 관심",
+                "risk": "메모리 가격 변동과 대형 고객사 투자 계획 변화",
+                "confidence": "중",
+            },
+            {
+                "rank": 3,
+                "stock_name": "HD현대일렉트릭",
+                "stock_code": "267260",
+                "market": "KOSPI",
+                "theme": "전력 인프라",
+                "reason": "샘플 뉴스 기준 데이터센터와 전력망 투자 확대 기대와 관련성이 있습니다.",
+                "news_evidence": "전력망 증설 필요성과 변압기·전력기기 수주 모멘텀 부각",
+                "expected_momentum": "전력기기 수주 기대감",
+                "risk": "수주 지연, 원자재 가격, 환율 변동",
+                "confidence": "중",
+            },
+            {
+                "rank": 4,
+                "stock_name": "LS ELECTRIC",
+                "stock_code": "010120",
+                "market": "KOSPI",
+                "theme": "전력기기",
+                "reason": "샘플 뉴스 기준 전력 인프라 투자 확대와 연결되는 종목입니다.",
+                "news_evidence": "데이터센터와 재생에너지 설비 증가로 전력망 증설 필요성 확대",
+                "expected_momentum": "전력 설비 투자 확대 기대",
+                "risk": "수주 경쟁 심화와 실적 반영 시차",
+                "confidence": "중",
+            },
+            {
+                "rank": 5,
+                "stock_name": "HD한국조선해양",
+                "stock_code": "009540",
+                "market": "KOSPI",
+                "theme": "조선",
+                "reason": "샘플 뉴스 기준 LNG선과 친환경 선박 발주 기대가 있습니다.",
+                "news_evidence": "조선 업황 개선 기대와 LNG선·친환경 선박 발주 주목",
+                "expected_momentum": "수주 잔고와 선박 발주 기대",
+                "risk": "원자재 가격, 환율, 인도 일정 지연 가능성",
+                "confidence": "중",
+            },
+        ],
+        "overall_market_summary": "샘플 뉴스 기준 AI 반도체, 전력 인프라, 조선 업종의 뉴스 모멘텀이 상대적으로 강하게 나타납니다.",
+        "disclaimer": "이 결과는 웹/API 연동 테스트용 더미 응답이며 매수·매도 추천이 아닙니다.",
+    }
 
 
 def _compact_json(data: Any, max_chars: int = MAX_FALLBACK_JSON_CHARS) -> str:
@@ -562,7 +640,7 @@ def fetch_ls_news() -> str:
     news_api_url = os.getenv("LS_NEWS_API_URL", LS_DEFAULT_NEWS_API_URL).strip()
 
     if _is_missing_env_value(app_key) or _is_missing_env_value(app_secret):
-        print("LS_APP_KEY 또는 LS_APP_SECRET이 비어 있어 샘플 뉴스 데이터를 사용합니다.")
+        print("LS_APP_KEY 또는 LS_APP_SECRET이 비어 있어 LS증권 뉴스 API 호출을 건너뜁니다.")
         return ""
 
     if not access_token:
@@ -794,18 +872,128 @@ def analyze_news_with_gemini(news_data: str) -> dict:
         sys.exit(1)
 
 
+def create_web_app():
+    """Create a FastAPI app for frontend/browser integration."""
+    try:
+        from fastapi import FastAPI, HTTPException
+        from pydantic import BaseModel, Field
+    except ImportError as exc:
+        raise RuntimeError(
+            "웹 서버 실행에 필요한 패키지가 없습니다. "
+            "pip install fastapi uvicorn 명령으로 설치해 주세요."
+        ) from exc
+
+    class AnalyzeRequest(BaseModel):
+        news_data: str | None = Field(
+            default=None,
+            description="직접 Gemini에 보낼 뉴스 문자열입니다. 비우면 LS증권 API 또는 샘플 뉴스를 사용합니다.",
+        )
+        use_sample_news: bool = Field(
+            default=False,
+            description="LS증권 API 대신 샘플 뉴스로 Gemini 호출을 테스트할지 여부입니다.",
+        )
+        use_dummy_ai: bool = Field(
+            default=False,
+            description="Gemini 호출 없이 고정 JSON 응답을 반환할지 여부입니다.",
+        )
+
+    app = FastAPI(
+        title="LS Securities News Gemini Analyzer",
+        description="LS증권 뉴스 또는 입력 뉴스를 Gemini로 분석해 JSON 종목 추천 결과를 반환합니다.",
+        version="1.0.0",
+    )
+
+    @app.get("/")
+    def root() -> dict[str, str]:
+        return {
+            "message": "LS Securities News Gemini Analyzer API",
+            "health": "/health",
+            "analyze": "/analyze",
+            "docs": "/docs",
+        }
+
+    @app.get("/health")
+    def health_check() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.post("/analyze")
+    def analyze(request: AnalyzeRequest) -> dict[str, Any]:
+        try:
+            if request.use_dummy_ai:
+                return get_dummy_analysis_result()
+
+            selected_news_data = (request.news_data or "").strip()
+
+            if not selected_news_data:
+                if request.use_sample_news:
+                    selected_news_data = get_sample_news_data()
+                else:
+                    selected_news_data = fetch_ls_news()
+
+            if not selected_news_data.strip():
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "뉴스 데이터를 가져오지 못했습니다. "
+                        "LS증권 환경변수를 설정하거나, use_sample_news=true 또는 news_data를 전달하세요."
+                    ),
+                )
+
+            return analyze_news_with_gemini(selected_news_data)
+
+        except HTTPException:
+            raise
+        except SystemExit as exc:
+            raise HTTPException(status_code=500, detail=f"분석 처리 중 종료되었습니다: {exc}") from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"분석 처리 중 오류가 발생했습니다: {exc}") from exc
+
+    return app
+
+
+def run_web_server() -> None:
+    """Run FastAPI web server with uvicorn."""
+    try:
+        import uvicorn
+    except ImportError as exc:
+        raise RuntimeError(
+            "uvicorn 패키지가 없습니다. pip install fastapi uvicorn 명령으로 설치해 주세요."
+        ) from exc
+
+    host = os.getenv("WEB_HOST", "127.0.0.1").strip() or "127.0.0.1"
+    port_text = os.getenv("WEB_PORT", "8000").strip() or "8000"
+
+    try:
+        port = int(port_text)
+    except ValueError:
+        print(f"WEB_PORT 값이 숫자가 아닙니다: {port_text}. 기본값 8000을 사용합니다.")
+        port = 8000
+
+    uvicorn.run(create_web_app(), host=host, port=port)
+
+
 def main() -> None:
     load_dotenv(PROJECT_ROOT / ".env", override=True)
 
+    if _env_flag("RUN_WEB_SERVER", default=False):
+        run_web_server()
+        return
+
+    if _env_flag("USE_DUMMY_AI", default=False):
+        result = get_dummy_analysis_result()
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+
     news_data = fetch_ls_news()
     if not news_data.strip():
-        if not _env_flag("USE_SAMPLE_NEWS", default=False):
+        if not _env_flag("USE_SAMPLE_NEWS", default=True):
             print(
-                "LS증권 실제 뉴스 데이터를 가져오지 못해 종료합니다. "
-                "샘플 뉴스로 Gemini 흐름만 테스트하려면 .env에 USE_SAMPLE_NEWS=true를 설정하세요."
+                "LS증권 실제 뉴스 데이터를 가져오지 못했습니다. "
+                "샘플 뉴스 사용을 막으려면 USE_SAMPLE_NEWS=false를 유지하고, "
+                "LS_APP_KEY/LS_APP_SECRET/뉴스 식별자를 설정해야 합니다."
             )
             sys.exit(1)
-        print("USE_SAMPLE_NEWS=true 설정에 따라 샘플 뉴스 데이터를 사용합니다.")
+        print("LS증권 뉴스 데이터가 없어 샘플 뉴스 데이터를 사용합니다.")
         news_data = get_sample_news_data()
 
     result = analyze_news_with_gemini(news_data)
