@@ -207,13 +207,21 @@ onMounted(async () => {
       ...stock.value,
       name: rec.stock_name,
       code: rec.stock_code,
-      market: rec.market || 'KOSPI',   // stocks 테이블에서 읽은 시장 구분
-      recommend: rec.recommendation === 'BUY',  // stock_recommendations.recommendation 사용
+      market: rec.market || 'KOSPI',
+      recommend: rec.recommendation === 'BUY',
       confidence: confidenceMap[rec.confidence] ?? 60,
       summary: rec.reason,
       positives: [rec.expected_momentum].filter(Boolean),
       negatives: [rec.risk].filter(Boolean),
       detailAnalysis: rec.reason + (rec.news_evidence ? '\n\n[분석 근거] ' + rec.news_evidence : ''),
+      // 더미 데이터 방지: news_evidence로 초기화 → DB 뉴스 조회 후 덮어씀
+      relatedNews: rec.news_evidence ? [{
+        id: 0,
+        sentiment: rec.recommendation === 'BUY' ? 'positive' : 'neutral',
+        time: data.analysis_date || '-',
+        title: `[AI 분석] ${rec.stock_name}`,
+        desc: rec.news_evidence,
+      }] : [],
     }
   } catch (_) {
     // DB 미연결 시 더미 데이터 유지
@@ -246,22 +254,30 @@ onMounted(async () => {
     } catch (_) {}
   }
 
-  // news_articles 테이블에서 관련 뉴스 조회
-  try {
-    const code = stock.value.code
-    const name = stock.value.name
-    const res = await axios.get(`${BASE_URL}/stocks/${code}/news`, { params: { name } })
-    const articles = res.data.articles || []
-    if (articles.length > 0) {
-      stock.value.relatedNews = articles.map(a => ({
-        id: a.article_id,
-        sentiment: 'neutral',
-        time: a.published_at || a.collected_at || '-',
-        title: a.title,
-        desc: a.summary || '',
-      }))
+  // news_articles 테이블에서 관련 뉴스 조회 (빈 결과 시 최대 3회 재시도)
+  const MAX_NEWS_RETRIES = 3
+  for (let attempt = 1; attempt <= MAX_NEWS_RETRIES; attempt++) {
+    try {
+      const res = await axios.get(`${BASE_URL}/stocks/${stock.value.code}/news`, {
+        params: { name: stock.value.name }
+      })
+      const articles = res.data.articles || []
+      if (articles.length > 0) {
+        stock.value.relatedNews = articles.map(a => ({
+          id: a.article_id,
+          sentiment: 'neutral',
+          time: a.published_at || a.collected_at || '-',
+          title: a.title,
+          desc: a.summary || '',
+        }))
+        break  // 성공 시 종료
+      }
+    } catch (_) {}
+    // 결과 없거나 실패 시: 마지막 시도가 아니면 2초 대기 후 재시도
+    if (attempt < MAX_NEWS_RETRIES) {
+      await new Promise(r => setTimeout(r, 2000))
     }
-  } catch (_) {}
+  }
 
   // 현재 포트폴리오에 이미 추가되어 있는지 확인
   if (userId.value && stock.value.code) {
