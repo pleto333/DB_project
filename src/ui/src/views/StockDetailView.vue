@@ -140,6 +140,7 @@ const router = useRouter()
 const BASE_URL = 'http://localhost:8080'
 
 const isAdded = ref(false)
+const userId = ref(localStorage.getItem('user_id') || '')
 
 // TODO: 실제로는 route.params.code 로 백엔드에서 받아오기
 // GET /stocks/:code/analysis
@@ -208,21 +209,39 @@ onMounted(async () => {
   } catch (_) {
     // DB 미연결 시 더미 데이터 유지
   }
+
+  // 현재 포트폴리오에 이미 추가되어 있는지 확인
+  if (userId.value && stock.value.code) {
+    try {
+      const res = await axios.get(`${BASE_URL}/portfolio`, { params: { user_id: userId.value } })
+      const items = res.data.items || []
+      isAdded.value = items.some(item => item.code === stock.value.code)
+    } catch (_) {}
+  }
 })
 
 async function togglePortfolio() {
-  if (isAdded.value) {
-    await axios.delete(`${BASE_URL}/portfolio`, {
-      data: { user_id: 'hong123', stock_code: stock.value.code }
-    })
-    isAdded.value = false
-  } else {
-    await axios.post(`${BASE_URL}/portfolio`, {
-      user_id: 'hong123',
-      stock_code: stock.value.code,
-      stock_name: stock.value.name
-    })
-    isAdded.value = true
+  if (!userId.value) {
+    alert('로그인이 필요합니다.')
+    return
+  }
+  try {
+    if (isAdded.value) {
+      await axios.delete(`${BASE_URL}/portfolio`, {
+        data: { user_id: userId.value, stock_code: stock.value.code }
+      })
+      isAdded.value = false
+    } else {
+      await axios.post(`${BASE_URL}/portfolio`, {
+        user_id: userId.value,
+        stock_code: stock.value.code,
+        stock_name: stock.value.name
+      })
+      isAdded.value = true
+    }
+  } catch (err) {
+    const msg = err?.response?.data?.detail?.message || err?.response?.data?.detail || '포트폴리오 처리 중 오류가 발생했습니다.'
+    alert(msg)
   }
 }
 

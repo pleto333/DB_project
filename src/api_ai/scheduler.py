@@ -14,7 +14,7 @@ from .config import (
     get_gemini_model,
     get_project_root,
 )
-from .gemini import analyze_news_with_gemini, get_sample_news_data
+from .gemini import GeminiRateLimitError, analyze_news_with_gemini, get_dummy_analysis_result, get_sample_news_data
 from .ls_api import fetch_ls_access_token, fetch_ls_news
 
 # 실시간 지수 데이터 저장소
@@ -74,21 +74,61 @@ def save_analysis_to_db(result: dict[str, Any], news_data: str = "") -> int | No
         return None
 
 
+_KR_STOCK_KEYWORDS = (
+    "코스피", "코스닥", "삼성", "현대", "SK", "LG", "카카오", "네이버", "셀트리온",
+    "한화", "포스코", "기아", "005930", "000660", "KOSPI", "KOSDAQ",
+    "수주", "매출", "영업이익", "HBM", "반도체", "조선", "바이오",
+)
+
+
+def _is_korean_stock_news(news_data: str) -> bool:
+    """LS 뉴스가 한국 주식 관련 내용인지 간단히 판별."""
+    return any(kw in news_data for kw in _KR_STOCK_KEYWORDS)
+
+
 async def run_scheduled_analysis() -> None:
-    """서버 시작 시 즉시 한 번 실행 후 10분마다 반복."""
+    """서버 시작 시 즉시 한 번 실행 후 10분마다 반복. 실패 시 1분 후 재시도 (최대 3회)."""
     loop = asyncio.get_event_loop()
+    retry_count = 0
+    MAX_RETRIES = 3
+
     while True:
         try:
             print("[스케줄러] AI 분석 시작...")
             news_data = await loop.run_in_executor(None, fetch_ls_news)
+
             if not news_data.strip():
+                print("[스케줄러] 뉴스 데이터 없음. 샘플 데이터 사용.")
                 news_data = get_sample_news_data()
+            elif not _is_korean_stock_news(news_data):
+                print("[스케줄러] 한국 주식 관련 뉴스 없음. 샘플 데이터 사용.")
+                news_data = get_sample_news_data()
+
             result = await loop.run_in_executor(None, analyze_news_with_gemini, news_data)
             save_analysis_to_db(result, news_data)
             print("[스케줄러] 분석 완료. 다음 실행까지 10분 대기.")
-        except (Exception, SystemExit) as exc:
-            print(f"[스케줄러] 오류: {exc}. 10분 후 재시도.")
-        await asyncio.sleep(600)
+            retry_count = 0
+            await asyncio.sleep(600)
+
+        except GeminiRateLimitError as exc:
+            # Gemini 사용량 한도: 더미 데이터로 DB 저장 후 1시간 대기
+            print(f"[스케줄러] {exc} 더미 데이터로 대체 저장 후 1시간 대기.")
+            try:
+                save_analysis_to_db(get_dummy_analysis_result(), "rate_limit_fallback")
+            except Exception as save_exc:
+                print(f"[스케줄러] 더미 데이터 저장 실패: {save_exc}")
+            await asyncio.sleep(3600)
+
+        except Exception as exc:
+            retry_count += 1
+            if retry_count <= MAX_RETRIES:
+                wait = 60 * retry_count  # 1분 → 2분 → 3분
+                print(f"[스케줄러] 오류 (시도 {retry_count}/{MAX_RETRIES}): {exc}. {wait}초 후 재시도.")
+            else:
+                wait = 600
+                retry_count = 0
+                print(f"[스케줄러] 최대 재시도 초과: {exc}. 10분 후 재시도.")
+            await asyncio.sleep(wait)
 
 
 async def _subscribe_market_index(access_token: str, tr_key: str, market: str) -> None:

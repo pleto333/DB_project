@@ -171,13 +171,20 @@ def _extract_json_object(text: str) -> str:
     return cleaned
 
 
+class GeminiRateLimitError(RuntimeError):
+    """Gemini API 사용량 한도 초과."""
+
+
+class GeminiUnavailableError(RuntimeError):
+    """Gemini API 서비스 불가."""
+
+
 def analyze_news_with_gemini(news_data: str) -> dict:
     from google import genai
 
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     if is_missing_env_value(api_key):
-        print("Gemini API Key가 없습니다. .env 파일에 GEMINI_API_KEY를 설정해 주세요.")
-        sys.exit(1)
+        raise RuntimeError("Gemini API Key가 없습니다. .env 파일에 GEMINI_API_KEY를 설정해 주세요.")
 
     prompt = build_prompt(news_data)
     client = genai.Client(api_key=api_key)
@@ -198,32 +205,27 @@ def analyze_news_with_gemini(news_data: str) -> dict:
                 last_error = exc
                 error_text = str(exc)
                 if "429" in error_text or "RESOURCE_EXHAUSTED" in error_text:
-                    print("Gemini API 사용량 한도에 도달했습니다.")
-                    sys.exit(1)
+                    raise GeminiRateLimitError("Gemini API 사용량 한도에 도달했습니다.") from exc
                 if "503" in error_text or "UNAVAILABLE" in error_text:
                     wait = min(2 ** attempt, 10)
                     print(f"Gemini 혼잡. model={gemini_model}, attempt={attempt}/{max_retries}, {wait}초 후 재시도.")
                     time.sleep(wait)
                     continue
-                print(f"Gemini API 호출 중 오류: {exc}")
-                sys.exit(1)
+                raise RuntimeError(f"Gemini API 호출 중 오류: {exc}") from exc
         if response is not None:
             break
         print(f"{gemini_model} 모델 재시도 실패. 다음 fallback 모델을 시도합니다.")
 
     if response is None:
-        print(f"Gemini API 호출을 완료하지 못했습니다: {last_error}")
-        sys.exit(1)
+        raise GeminiUnavailableError(f"Gemini API 호출을 완료하지 못했습니다: {last_error}")
 
     raw_text = getattr(response, "text", None)
     if not raw_text or not raw_text.strip():
-        print("Gemini 응답이 비어 있습니다.")
-        sys.exit(1)
+        raise RuntimeError("Gemini 응답이 비어 있습니다.")
 
     cleaned_text = _extract_json_object(raw_text)
     try:
         return json.loads(cleaned_text)
     except json.JSONDecodeError as exc:
-        print(f"Gemini 응답을 JSON으로 파싱하지 못했습니다: {exc}")
-        print(f"\n[Gemini 원본 응답]\n{raw_text}")
-        sys.exit(1)
+        print(f"Gemini 응답을 JSON으로 파싱하지 못했습니다: {exc}\n[원본]\n{raw_text}")
+        raise RuntimeError(f"Gemini JSON 파싱 실패: {exc}") from exc
