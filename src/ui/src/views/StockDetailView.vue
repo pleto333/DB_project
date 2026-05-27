@@ -173,6 +173,23 @@ const stock = ref({
   ]
 })
 
+function calcDetailSparkline(prices) {
+  if (!prices || prices.length < 2) return { line: '0,30 160,30', area: '0,30 160,30 160,60 0,60' }
+  const min = Math.min(...prices)
+  const max = Math.max(...prices)
+  const range = max - min || 1
+  const pad = 4
+  const pts = prices.map((p, i) => {
+    const x = (i / (prices.length - 1)) * 160
+    const y = pad + (1 - (p - min) / range) * (60 - pad * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  })
+  return {
+    line: pts.join(' '),
+    area: pts.join(' ') + ' 160,60 0,60',
+  }
+}
+
 onMounted(async () => {
   try {
     const res = await axios.get(`${BASE_URL}/recommendations/latest`)
@@ -196,8 +213,8 @@ onMounted(async () => {
       positives: [rec.expected_momentum].filter(Boolean),
       negatives: [rec.risk].filter(Boolean),
       detailAnalysis: rec.reason + (rec.news_evidence ? '\n\n[분석 근거] ' + rec.news_evidence : ''),
-      chartLine: '0,50 20,45 40,48 60,35 80,30 100,25 120,20 140,15 160,10',
-      areaLine: '0,50 20,45 40,48 60,35 80,30 100,25 120,20 140,15 160,10 160,60 0,60',
+      chartLine: '0,30 160,30',
+      areaLine: '0,30 160,30 160,60 0,60',
       relatedNews: rec.news_evidence ? [{
         id: 1,
         sentiment: rec.confidence === '하' ? 'negative' : 'positive',
@@ -208,6 +225,28 @@ onMounted(async () => {
     }
   } catch (_) {
     // DB 미연결 시 더미 데이터 유지
+  }
+
+  // 주가 데이터 (스파크라인 + 변동률) 로드
+  const code = stock.value.code
+  if (code && !code.startsWith('TBD_')) {
+    try {
+      const res = await axios.get(`${BASE_URL}/stocks/price`, { params: { codes: code } })
+      const prices = res.data[code]
+      if (prices && prices.length >= 2) {
+        const last = prices[prices.length - 1]
+        const prev = prices[prices.length - 2]
+        const change = parseFloat(((last - prev) / prev * 100).toFixed(2))
+        const { line, area } = calcDetailSparkline(prices)
+        stock.value = {
+          ...stock.value,
+          price: last.toLocaleString('ko-KR') + '원',
+          change,
+          chartLine: line,
+          areaLine: area,
+        }
+      }
+    } catch (_) {}
   }
 
   // 현재 포트폴리오에 이미 추가되어 있는지 확인
