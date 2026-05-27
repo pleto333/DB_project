@@ -394,7 +394,9 @@ def fetch_stock_daily_prices(access_token: str, stock_code: str, days: int = 10)
         if close is None:
             continue
         try:
-            prices.append(float(str(close).replace(",", "")))
+            val = float(str(close).replace(",", ""))
+            if val > 0:   # 0원 데이터(비거래일/미래 날짜) 제외
+                prices.append(val)
         except (ValueError, TypeError):
             pass
     return prices
@@ -415,6 +417,8 @@ def fetch_stock_current_price(access_token: str, stock_code: str) -> dict[str, A
 
     def _from_daily() -> dict[str, Any]:
         prices = fetch_stock_daily_prices(access_token, stock_code, days=2)
+        # 0 이하 값은 무효 데이터이므로 제거 (이미 fetch에서 필터되지만 방어적으로 재확인)
+        prices = [p for p in prices if p > 0]
         if len(prices) >= 2:
             price, prev = prices[-1], prices[-2]
             change = round(price - prev, 0)

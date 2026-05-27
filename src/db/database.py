@@ -230,29 +230,187 @@ def get_user_by_username(username: str) -> dict[str, Any] | None:
 
 
 def get_latest_analysis_json() -> dict[str, Any]:
-    """Return full Gemini response JSON from the latest llm_analysis row."""
-    sql = """
-        SELECT analysis_id, response_json, analyzed_at
-        FROM llm_analysis
-        ORDER BY analyzed_at DESC, analysis_id DESC
-        LIMIT 1
     """
-
+    recommendations → stock_recommendations JOIN stocks 에서 조회.
+    theme/news_evidence 등 정규화되지 않은 보조 필드는 llm_analysis.response_json 에서 보완.
+    """
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute(sql)
-        row = cursor.fetchone()
-        if row is None:
+        # ① 최신 분석 메타데이터
+        cursor.execute("""
+            SELECT analysis_id, response_json, analyzed_at
+            FROM llm_analysis
+            ORDER BY analyzed_at DESC, analysis_id DESC
+            LIMIT 1
+        """)
+        meta = cursor.fetchone()
+        if meta is None:
             return {}
-        response_json = row.get("response_json")
+
+        analysis_id = meta["analysis_id"]
+        analyzed_at = str(meta["analyzed_at"])
+        response_json = meta.get("response_json") or {}
         if isinstance(response_json, str):
             response_json = json.loads(response_json)
-        return {
-            "analysis_id": row["analysis_id"],
-            "analyzed_at": str(row["analyzed_at"]),
-            **(response_json or {}),
-        }
+
+        # ② stock_recommendations JOIN stocks — 정규화된 추천 종목 조회
+        cursor.execute("""
+            SELECT
+                sr.rank_no,
+                sr.recommendation,
+                sr.reason,
+                sr.confidence,
+                s.stock_code,
+                s.stock_name,
+                s.market
+            FROM stock_recommendations sr
+            JOIN stocks s ON s.stock_id = sr.stock_id
+            WHERE sr.analysis_id = %s
+            ORDER BY sr.rank_no
+        """, (analysis_id,))
+        db_recs = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+    # ③ response_json 추천 목록을 rank 기준 맵으로 준비 (보조 필드 보완용)
+    json_rec_map = {
+        r.get("rank"): r
+        for r in (response_json.get("recommendations") or [])
+    }
+
+    merged_recs = []
+    for row in db_recs:
+        rank = row["rank_no"]
+        conf = float(row["confidence"]) if row["confidence"] is not None else 0.5
+        # DB에는 0.0~1.0 소수로 저장, 화면용 레이블로 역변환
+        conf_label = "상" if conf >= 0.7 else ("하" if conf <= 0.3 else "중")
+        sup = json_rec_map.get(rank, {})
+        merged_recs.append({
+            "rank":             rank,
+            "stock_name":       row["stock_name"],       # stocks 테이블
+            "stock_code":       row["stock_code"],       # stocks 테이블
+            "market":           row["market"],           # stocks 테이블
+            "recommendation":   row["recommendation"],   # stock_recommendations
+            "reason":           row["reason"],           # stock_recommendations
+            "confidence":       sup.get("confidence", conf_label),
+            # response_json 보완 필드
+            "theme":            sup.get("theme", ""),
+            "news_evidence":    sup.get("news_evidence", ""),
+            "expected_momentum": sup.get("expected_momentum", ""),
+            "risk":             sup.get("risk", ""),
+        })
+
+    # DB에 추천 데이터가 없으면 response_json 그대로 사용 (구버전 호환)
+    if not merged_recs:
+        merged_recs = response_json.get("recommendations", [])
+
+    return {
+        "analysis_id":           analysis_id,
+        "analyzed_at":           analyzed_at,
+        "analysis_date":         response_json.get("analysis_date", ""),
+        "top_themes":            response_json.get("top_themes", []),
+        "market_news":           response_json.get("market_news", {}),
+        "overall_market_summary": response_json.get("overall_market_summary", ""),
+        "disclaimer":            response_json.get("disclaimer", ""),
+        "recommendations":       merged_recs,
+    }
+
+
+def get_latest_news_articles(limit: int = 20) -> list[dict[str, Any]]:
+    """news_articles 테이블에서 최근 수집된 뉴스 반환."""
+    sql = """
+        SELECT article_id, title, summary, publisher, source,
+               published_at, collected_at
+        FROM news_articles
+        ORDER BY collected_at DESC
+        LIMIT %s
+    """
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(sql, (limit,))
+        return [
+            {
+                "article_id":   r["article_id"],
+                "title":        r["title"],
+                "summary":      r["summary"] or "",
+                "publisher":    r["publisher"] or "LS증권",
+                "source":       r["source"],
+                "published_at": str(r["published_at"]) if r["published_at"] else "",
+                "collected_at": str(r["collected_at"]),
+            }
+            for r in cursor.fetchall()
+        ]
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_news_by_stock(stock_name: str, stock_code: str, limit: int = 5) -> list[dict[str, Any]]:
+    """종목명 또는 종목코드가 포함된 news_articles 반환."""
+    sql = """
+        SELECT article_id, title, summary, publisher, published_at, collected_at
+        FROM news_articles
+        WHERE title LIKE %s OR summary LIKE %s
+        ORDER BY collected_at DESC
+        LIMIT %s
+    """
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # 종목명으로 먼저 검색
+        pattern = f"%{stock_name}%"
+        cursor.execute(sql, (pattern, pattern, limit))
+        rows = cursor.fetchall()
+        # 결과 없으면 종목코드로 재검색
+        if not rows and stock_code:
+            code_pattern = f"%{stock_code}%"
+            cursor.execute(sql, (code_pattern, code_pattern, limit))
+            rows = cursor.fetchall()
+        return [
+            {
+                "article_id": r["article_id"],
+                "title": r["title"],
+                "summary": r["summary"] or "",
+                "publisher": r["publisher"] or "LS증권",
+                "published_at": str(r["published_at"]) if r["published_at"] else "",
+                "collected_at": str(r["collected_at"]),
+            }
+            for r in rows
+        ]
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def search_stocks(query: str, limit: int = 10) -> list[dict[str, Any]]:
+    """종목명 또는 종목코드로 stocks 테이블 검색."""
+    sql = """
+        SELECT stock_code, stock_name, market
+        FROM stocks
+        WHERE (stock_code LIKE %s OR stock_name LIKE %s)
+          AND stock_code NOT LIKE 'TBD\\_%%'
+        ORDER BY
+            CASE
+                WHEN stock_code = %s THEN 0
+                WHEN stock_name = %s THEN 1
+                ELSE 2
+            END,
+            LENGTH(stock_name),
+            stock_name
+        LIMIT %s
+    """
+    pattern = f"%{query}%"
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(sql, (pattern, pattern, query, query, limit))
+        return [
+            {"stock_code": r["stock_code"], "stock_name": r["stock_name"], "market": r["market"]}
+            for r in cursor.fetchall()
+        ]
     finally:
         cursor.close()
         conn.close()

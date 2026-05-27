@@ -16,7 +16,7 @@
       <div class="stock-hero">
         <div class="stock-hero-left">
           <h1 class="hero-name">{{ stock.name }}</h1>
-          <p class="hero-code">{{ stock.code }} · 코스피</p>
+          <p class="hero-code">{{ stock.code }} · {{ stock.market }}</p>
           <p class="hero-price">{{ stock.price }}</p>
           <p :class="['hero-change', stock.change > 0 ? 'up' : 'down']">
             {{ stock.change > 0 ? '▲' : '▼' }} {{ Math.abs(stock.change) }}%
@@ -147,6 +147,7 @@ const userId = ref(localStorage.getItem('user_id') || '')
 const stock = ref({
   name: '삼성전자',
   code: route.params.code || '005930',
+  market: 'KOSPI',
   price: '71,500원',
   change: 2.3,
   recommend: true,
@@ -203,25 +204,16 @@ onMounted(async () => {
 
     const confidenceMap = { '상': 85, '중': 60, '하': 35 }
     stock.value = {
+      ...stock.value,
       name: rec.stock_name,
       code: rec.stock_code,
-      price: '-',
-      change: 0,
-      recommend: rec.confidence !== '하',
+      market: rec.market || 'KOSPI',   // stocks 테이블에서 읽은 시장 구분
+      recommend: rec.recommendation === 'BUY',  // stock_recommendations.recommendation 사용
       confidence: confidenceMap[rec.confidence] ?? 60,
       summary: rec.reason,
       positives: [rec.expected_momentum].filter(Boolean),
       negatives: [rec.risk].filter(Boolean),
       detailAnalysis: rec.reason + (rec.news_evidence ? '\n\n[분석 근거] ' + rec.news_evidence : ''),
-      chartLine: '0,30 160,30',
-      areaLine: '0,30 160,30 160,60 0,60',
-      relatedNews: rec.news_evidence ? [{
-        id: 1,
-        sentiment: rec.confidence === '하' ? 'negative' : 'positive',
-        time: data.analysis_date || '-',
-        title: `[${rec.theme}] ${rec.stock_name} 분석 근거`,
-        desc: rec.news_evidence,
-      }] : [],
     }
   } catch (_) {
     // DB 미연결 시 더미 데이터 유지
@@ -253,6 +245,23 @@ onMounted(async () => {
       }
     } catch (_) {}
   }
+
+  // news_articles 테이블에서 관련 뉴스 조회
+  try {
+    const code = stock.value.code
+    const name = stock.value.name
+    const res = await axios.get(`${BASE_URL}/stocks/${code}/news`, { params: { name } })
+    const articles = res.data.articles || []
+    if (articles.length > 0) {
+      stock.value.relatedNews = articles.map(a => ({
+        id: a.article_id,
+        sentiment: 'neutral',
+        time: a.published_at || a.collected_at || '-',
+        title: a.title,
+        desc: a.summary || '',
+      }))
+    }
+  } catch (_) {}
 
   // 현재 포트폴리오에 이미 추가되어 있는지 확인
   if (userId.value && stock.value.code) {

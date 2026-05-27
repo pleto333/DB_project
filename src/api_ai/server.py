@@ -132,6 +132,19 @@ def create_web_app():
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"DB 조회 중 오류: {exc}") from exc
 
+    @app.get("/news/latest")
+    def get_latest_news() -> dict[str, Any]:
+        """news_articles 테이블에서 최근 수집된 뉴스 반환."""
+        try:
+            proj_root = get_project_root()
+            if str(proj_root) not in sys.path:
+                sys.path.insert(0, str(proj_root))
+            from src.db.database import get_latest_news_articles
+            articles = get_latest_news_articles(limit=20)
+            return {"articles": articles}
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"뉴스 조회 실패: {exc}")
+
     @app.get("/market/indices")
     async def get_market_indices() -> dict[str, Any]:
         return market_indices
@@ -265,6 +278,33 @@ def create_web_app():
         if result.get("price") is not None:
             _realtime_cache[code] = (now, result)
         return result
+
+    @app.get("/stocks/{code}/news")
+    def get_stock_related_news(code: str, name: str = "") -> dict[str, Any]:
+        """종목 관련 뉴스 반환 — news_articles 테이블에서 종목명/코드 검색."""
+        try:
+            proj_root = get_project_root()
+            if str(proj_root) not in sys.path:
+                sys.path.insert(0, str(proj_root))
+            from src.db.database import get_news_by_stock
+            articles = get_news_by_stock(stock_name=name, stock_code=code, limit=5)
+            return {"articles": articles}
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"뉴스 조회 실패: {exc}")
+
+    @app.get("/stocks/search")
+    def search_stocks_endpoint(query: str = "") -> list[dict[str, Any]]:
+        """종목명·종목코드로 stocks 테이블 검색."""
+        if not query.strip():
+            return []
+        try:
+            proj_root = get_project_root()
+            if str(proj_root) not in sys.path:
+                sys.path.insert(0, str(proj_root))
+            from src.db.database import search_stocks
+            return search_stocks(query.strip(), limit=10)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"검색 실패: {exc}")
 
     _price_cache: dict[str, tuple[float, list[float]]] = {}
     _PRICE_CACHE_TTL = 300

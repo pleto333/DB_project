@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
+import re
 import ssl
 import sys
 from datetime import datetime
@@ -22,6 +24,74 @@ market_indices: dict[str, Any] = {
     "kospi": {"value": None, "drate": None, "sign": None, "change": None, "updated_at": None},
     "kosdaq": {"value": None, "drate": None, "sign": None, "change": None, "updated_at": None},
 }
+
+
+def _save_news_to_db(news_data: str, proj_root) -> None:
+    """뉴스 텍스트를 파싱해 news_articles 테이블에 개별 기사로 저장."""
+    if not news_data or news_data in ("auto", "rate_limit_fallback"):
+        return
+
+    try:
+        if str(proj_root) not in sys.path:
+            sys.path.insert(0, str(proj_root))
+        from src.db.database import save_news_article
+    except Exception as exc:
+        print(f"[뉴스저장] DB import 오류: {exc}")
+        return
+
+    articles: list[dict] = []
+
+    # 번호 형식 뉴스 목록 파싱:
+    #   [LS증권 API 최신 뉴스 데이터] 또는 [샘플 뉴스 데이터]
+    #   "N. 날짜: DATE\n   제목: TITLE\n   내용: BODY"
+    if re.search(r'\d+\.\s+날짜:', news_data):
+        blocks = re.split(r'\n\d+\.\s+날짜:', news_data)
+        for block in blocks[1:]:
+            lines = block.split('\n')
+            date_str = lines[0].strip() if lines else ''
+            title_m = re.search(r'제목:\s*(.+)', block)
+            body_m = re.search(r'내용:\s*([\s\S]+)', block)
+            title = title_m.group(1).strip() if title_m else ''
+            body = body_m.group(1).strip() if body_m else ''
+            if not title or title == '제목 없음':
+                continue
+            articles.append({
+                'title': title[:300],
+                'summary': body[:2000] if body and body != '본문/요약 없음' else None,
+                'published_at': date_str if date_str and date_str not in ('알 수 없음', '-') else None,
+            })
+
+    # 단일 기사 본문 형식: [LS증권 API 뉴스본문 데이터]
+    elif "[LS증권 API 뉴스본문 데이터]" in news_data:
+        title_m = re.search(r'제목:\s*(.+)', news_data)
+        body_m = re.search(r'본문:\n([\s\S]+)', news_data)
+        title = title_m.group(1).strip() if title_m else ''
+        body = body_m.group(1).strip() if body_m else ''
+        if title:
+            articles.append({
+                'title': title[:300],
+                'summary': body[:2000] if body else None,
+                'published_at': None,
+            })
+
+    saved = 0
+    for art in articles:
+        # URL은 제목 해시로 생성 (LS API는 기사 URL을 제공하지 않음)
+        url = f"ls://news/{hashlib.md5(art['title'].encode('utf-8')).hexdigest()}"
+        try:
+            save_news_article(
+                title=art['title'],
+                url=url,
+                summary=art.get('summary'),
+                publisher='LS증권',
+                source='ls_securities',
+                published_at=art.get('published_at'),
+            )
+            saved += 1
+        except Exception:
+            pass  # 중복 등 개별 오류 무시
+    if saved:
+        print(f"[뉴스저장] {saved}건 news_articles 저장 완료.")
 
 
 def save_analysis_to_db(result: dict[str, Any], news_data: str = "") -> int | None:
@@ -68,6 +138,8 @@ def save_analysis_to_db(result: dict[str, Any], news_data: str = "") -> int | No
             )
 
         print(f"DB 저장 완료: analysis_id={analysis_id}")
+        # news_articles 테이블에 개별 뉴스 기사 저장
+        _save_news_to_db(news_data, proj_root)
         return analysis_id
     except Exception as exc:
         print(f"DB 저장 중 오류 (분석 결과는 정상 반환): {exc}")
