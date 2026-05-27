@@ -608,6 +608,32 @@ async function loadAllPrices() {
   } catch (_) {}
 }
 
+// 실시간 현재가: 1초 간격으로 종목 하나씩 요청, 도착 즉시 UI 업데이트
+async function loadRealtimePrices() {
+  const recCodes = recommendedStocks.value.filter(s => s.code && !s.code.startsWith('TBD_')).map(s => s.code)
+  const portCodes = portfolio.value.filter(s => s.code && !s.code.startsWith('TBD_')).map(s => s.code)
+  const allCodes = [...new Set([...recCodes, ...portCodes])]
+  if (!allCodes.length) return
+
+  for (let i = 0; i < allCodes.length; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, 1000))
+    const code = allCodes[i]
+    try {
+      const res = await axios.get(`${BASE_URL}/stocks/realtime`, { params: { code } })
+      const d = res.data
+      if (d.price == null) continue
+      const priceStr = Math.round(d.price).toLocaleString('ko-KR') + '원'
+      const change = parseFloat((d.drate ?? 0).toFixed(2))
+      recommendedStocks.value = recommendedStocks.value.map(s =>
+        s.code === code ? { ...s, price: priceStr, change } : s
+      )
+      portfolio.value = portfolio.value.map(s =>
+        s.code === code ? { ...s, price: priceStr, change } : s
+      )
+    } catch (_) {}
+  }
+}
+
 let refreshTimer = null
 let indicesTimer = null
 
@@ -615,7 +641,8 @@ onMounted(async () => {
   await loadRecommendations()
   await loadMarketIndices()
   await loadPortfolio()
-  loadAllPrices()
+  await loadAllPrices()       // 스파크라인 + 전일 종가 (먼저 표시)
+  loadRealtimePrices()        // 현재가 1초 간격 순차 업데이트
   loadGlobalIndices()
   refreshTimer = setInterval(loadRecommendations, 60 * 1000)
   indicesTimer = setInterval(loadMarketIndices, 30 * 1000)

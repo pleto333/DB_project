@@ -17,7 +17,7 @@ except ImportError as exc:
 
 from .config import get_project_root
 from .gemini import analyze_news_with_gemini, get_dummy_analysis_result, get_sample_news_data
-from .ls_api import fetch_global_indices, fetch_ls_access_token, fetch_ls_news, fetch_stock_daily_prices
+from .ls_api import fetch_global_indices, fetch_ls_access_token, fetch_ls_news, fetch_stock_current_price, fetch_stock_daily_prices
 from .scheduler import market_indices, run_market_indices, run_scheduled_analysis, save_analysis_to_db
 
 
@@ -228,6 +228,43 @@ def create_web_app():
             _global_cache["data"] = data
             _global_cache["ts"] = now
         return data
+
+    _realtime_cache: dict[str, tuple[float, dict]] = {}
+    _REALTIME_CACHE_TTL = 60  # 1분 캐시
+
+    async def _get_access_token() -> str:
+        token = os.getenv("LS_ACCESS_TOKEN", "").strip()
+        if not token:
+            from .config import is_missing_env_value
+            app_key = os.getenv("LS_APP_KEY", "").strip()
+            app_secret = os.getenv("LS_APP_SECRET", "").strip()
+            if not is_missing_env_value(app_key) and not is_missing_env_value(app_secret):
+                loop = asyncio.get_event_loop()
+                token = await loop.run_in_executor(None, fetch_ls_access_token, app_key, app_secret)
+        return token
+
+    @app.get("/stocks/realtime")
+    async def get_stock_realtime_price(code: str) -> dict[str, Any]:
+        """단일 종목 실시간 현재가. 장중: t1102, 장외: t8413 종가 fallback."""
+        code = code.strip()
+        if not code:
+            return {"code": code, "price": None, "change": None, "drate": None, "is_realtime": False}
+
+        now = time.time()
+        cached = _realtime_cache.get(code)
+        if cached and now - cached[0] < _REALTIME_CACHE_TTL:
+            return cached[1]
+
+        access_token = await _get_access_token()
+        loop = asyncio.get_event_loop()
+        try:
+            result = await loop.run_in_executor(None, fetch_stock_current_price, access_token, code)
+        except Exception:
+            result = {"code": code, "price": None, "change": None, "drate": None, "is_realtime": False}
+
+        if result.get("price") is not None:
+            _realtime_cache[code] = (now, result)
+        return result
 
     _price_cache: dict[str, tuple[float, list[float]]] = {}
     _PRICE_CACHE_TTL = 300

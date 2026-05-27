@@ -227,23 +227,28 @@ onMounted(async () => {
     // DB 미연결 시 더미 데이터 유지
   }
 
-  // 주가 데이터 (스파크라인 + 변동률) 로드
+  // 주가 데이터 로드
   const code = stock.value.code
   if (code && !code.startsWith('TBD_')) {
+    // 1) 스파크라인: t8413 일봉 (차트용)
     try {
       const res = await axios.get(`${BASE_URL}/stocks/price`, { params: { codes: code } })
       const prices = res.data[code]
       if (prices && prices.length >= 2) {
-        const last = prices[prices.length - 1]
-        const prev = prices[prices.length - 2]
-        const change = parseFloat(((last - prev) / prev * 100).toFixed(2))
         const { line, area } = calcDetailSparkline(prices)
+        stock.value = { ...stock.value, chartLine: line, areaLine: area }
+      }
+    } catch (_) {}
+
+    // 2) 현재가: t1102 (장중) / t8413 종가 (장외)
+    try {
+      const res = await axios.get(`${BASE_URL}/stocks/realtime`, { params: { code } })
+      const d = res.data
+      if (d.price != null) {
         stock.value = {
           ...stock.value,
-          price: last.toLocaleString('ko-KR') + '원',
-          change,
-          chartLine: line,
-          areaLine: area,
+          price: Math.round(d.price).toLocaleString('ko-KR') + '원',
+          change: parseFloat((d.drate ?? 0).toFixed(2)),
         }
       }
     } catch (_) {}

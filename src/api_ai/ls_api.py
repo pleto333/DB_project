@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import html
 import json
 import os
@@ -12,7 +13,9 @@ import requests
 
 from .config import (
     LS_CHART_TR_CODE,
+    LS_CURRENT_PRICE_TR_CODE,
     LS_DEFAULT_NEWS_API_URL,
+    LS_DEFAULT_STOCK_MARKET_URL,
     LS_DEFAULT_NEWS_WS_TR_KEY,
     LS_DEFAULT_NEWS_WS_URL,
     LS_DEFAULT_STOCK_API_URL,
@@ -395,3 +398,64 @@ def fetch_stock_daily_prices(access_token: str, stock_code: str, days: int = 10)
         except (ValueError, TypeError):
             pass
     return prices
+
+
+def is_market_open() -> bool:
+    """한국 주식 시장 개장 여부 (09:00~15:30 KST, 평일)."""
+    now = datetime.datetime.now()
+    if now.weekday() >= 5:  # 토(5), 일(6)
+        return False
+    market_open = now.replace(hour=9, minute=0, second=0, microsecond=0)
+    market_close = now.replace(hour=15, minute=30, second=0, microsecond=0)
+    return market_open <= now <= market_close
+
+
+def fetch_stock_current_price(access_token: str, stock_code: str) -> dict[str, Any]:
+    """장중: t1102 현재가 조회. 장외: t8413 최근 종가 fallback."""
+
+    def _from_daily() -> dict[str, Any]:
+        prices = fetch_stock_daily_prices(access_token, stock_code, days=2)
+        if len(prices) >= 2:
+            price, prev = prices[-1], prices[-2]
+            change = round(price - prev, 0)
+            drate = round((price - prev) / prev * 100, 2) if prev else 0.0
+            return {"code": stock_code, "price": price, "change": change, "drate": drate, "is_realtime": False}
+        if len(prices) == 1:
+            return {"code": stock_code, "price": prices[0], "change": 0.0, "drate": 0.0, "is_realtime": False}
+        return {"code": stock_code, "price": None, "change": None, "drate": None, "is_realtime": False}
+
+    if not is_market_open():
+        return _from_daily()
+
+    # 장중: t1102 현재가
+    market_url = os.getenv("LS_STOCK_MARKET_URL", LS_DEFAULT_STOCK_MARKET_URL).strip() or LS_DEFAULT_STOCK_MARKET_URL
+    payload = {"t1102InBlock": {"shcode": stock_code}}
+    api_json = request_ls_api(
+        access_token=access_token,
+        api_url=market_url,
+        tr_code=LS_CURRENT_PRICE_TR_CODE,
+        payload=payload,
+        description=f"t1102 현재가({stock_code})",
+    )
+
+    if not api_json:
+        return _from_daily()
+
+    out = api_json.get("t1102OutBlock", {})
+    if not isinstance(out, dict):
+        return _from_daily()
+
+    try:
+        price = float(str(out.get("price") or 0).replace(",", ""))
+        change = float(str(out.get("change") or 0).replace(",", ""))
+        drate = float(str(out.get("drate") or 0).replace(",", "").replace("%", ""))
+        sign = str(out.get("sign", "3"))
+        # sign: 1=상한, 2=상승, 3=보합, 4=하락, 5=하한
+        if sign in ("4", "5"):
+            drate = -abs(drate)
+            change = -abs(change)
+        if price <= 0:
+            return _from_daily()
+        return {"code": stock_code, "price": price, "change": change, "drate": drate, "is_realtime": True}
+    except (ValueError, TypeError):
+        return _from_daily()
