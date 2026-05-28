@@ -145,33 +145,20 @@ const userId = ref(localStorage.getItem('user_id') || '')
 // TODO: 실제로는 route.params.code 로 백엔드에서 받아오기
 // GET /stocks/:code/analysis
 const stock = ref({
-  name: '삼성전자',
-  code: route.params.code || '005930',
-  market: 'KOSPI',
-  price: '71,500원',
-  change: 2.3,
-  recommend: true,
-  confidence: 82,
-  summary: '반도체 수출 증가와 HBM 수요 급증으로 단기 상승 모멘텀이 강하게 형성되어 있습니다. AI 서버 투자 확대에 따른 수혜가 예상됩니다.',
-  positives: [
-    '2분기 반도체 수출액 전년 대비 34% 증가',
-    'HBM3E 엔비디아 공급 계약 체결 보도',
-    '외국인 투자자 4거래일 연속 순매수',
-    '증권사 목표주가 상향 조정 잇따라',
-  ],
-  negatives: [
-    '중국 반도체 자급률 상승으로 장기 수요 불확실',
-    '원달러 환율 하락 시 수출 수익성 감소 우려',
-  ],
-  detailAnalysis: '최근 5일간 LS증권 뉴스 128건을 분석한 결과, 삼성전자 관련 긍정 뉴스 비율이 74%로 높게 나타났습니다. 특히 HBM 관련 뉴스에서 긍정 감성 지수가 0.87로 매우 높았으며, 외국인 매수세 유입과 함께 기술적 지지선인 70,000원을 안정적으로 유지하고 있습니다. 단기(1~2주) 관점에서 매수 추천이며, 75,000원을 1차 목표가로 제시합니다.',
-  chartLine: '0,50 20,45 40,48 60,35 80,30 100,25 120,20 140,15 160,10',
-  areaLine: '0,50 20,45 40,48 60,35 80,30 100,25 120,20 140,15 160,10 160,60 0,60',
-  relatedNews: [
-    { id: 1, sentiment: 'positive', time: '5분 전', title: '삼성전자, HBM3E 엔비디아 공급 계약 체결', desc: '삼성전자가 엔비디아와 HBM3E 메모리 공급 계약을 체결했다고 업계 관계자가 밝혔다.' },
-    { id: 2, sentiment: 'positive', time: '1시간 전', title: '반도체 수출 34% 증가... 삼성·SK 수혜 집중', desc: '산업통상자원부에 따르면 2분기 반도체 수출이 전년 동기 대비 34% 증가한 것으로 나타났다.' },
-    { id: 3, sentiment: 'neutral', time: '3시간 전', title: '삼성전자 목표주가 80,000원으로 상향 - 미래에셋', desc: '미래에셋증권은 삼성전자 목표주가를 기존 75,000원에서 80,000원으로 상향 조정했다.' },
-    { id: 4, sentiment: 'negative', time: '5시간 전', title: '중국 반도체 자급률 2030년 70% 목표 발표', desc: '중국 정부가 2030년까지 반도체 자급률 70% 달성을 목표로 추가 지원책을 발표했다.' },
-  ]
+  name: '',
+  code: route.params.code || '',
+  market: '',
+  price: '-',
+  change: 0,
+  recommend: false,
+  confidence: 0,
+  summary: '',
+  positives: [],
+  negatives: [],
+  detailAnalysis: '',
+  chartLine: '0,30 160,30',
+  areaLine: '0,30 160,30 160,60 0,60',
+  relatedNews: [],
 })
 
 function calcDetailSparkline(prices) {

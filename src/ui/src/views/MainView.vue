@@ -407,35 +407,21 @@ function showMessage(msg, type) {
 
 // ── 티커/차트 더미 데이터 ──
 const tickerItems = ref([
-  { name: 'KOSPI', value: '2,623.45', change: 0.87 },
-  { name: 'KOSDAQ', value: '748.32', change: -0.43 },
-  { name: 'NASDAQ', value: '19,245.30', change: 1.24 },
-  { name: 'S&P500', value: '5,308.12', change: 0.62 },
-  { name: 'DOW', value: '39,872.00', change: -0.18 },
-  { name: '닛케이', value: '38,450.20', change: 0.55 },
-  { name: 'WTI', value: '78.40달러', change: -0.32 },
-  { name: '금', value: '2,345달러', change: 0.21 },
-  { name: '환율(USD)', value: '1,342원', change: -0.15 },
+  { name: 'KOSPI',    value: '-', change: 0 },
+  { name: 'KOSDAQ',   value: '-', change: 0 },
+  { name: 'NASDAQ',   value: '-', change: 0 },
+  { name: 'S&P500',   value: '-', change: 0 },
+  { name: 'DOW',      value: '-', change: 0 },
+  { name: '닛케이',   value: '-', change: 0 },
+  { name: 'WTI',      value: '-', change: 0 },
+  { name: '금',       value: '-', change: 0 },
+  { name: '환율(USD)', value: '-', change: 0 },
 ])
 
-const recommendedStocks = ref([
-  { rank: 1, name: '삼성전자', code: '005930', price: '71,500원', change: 2.3, reason: '반도체 수출 증가', sparkline: '0,20 10,18 20,22 30,15 40,12 50,10 60,6' },
-  { rank: 2, name: 'SK하이닉스', code: '000660', price: '138,000원', change: 1.8, reason: 'HBM 수요 급증', sparkline: '0,22 10,20 20,18 30,16 40,14 50,10 60,8' },
-  { rank: 3, name: 'NAVER', code: '035420', price: '182,500원', change: -0.5, reason: 'AI 서비스 확장', sparkline: '0,8 10,10 20,12 30,14 40,16 50,18 60,20' },
-  { rank: 4, name: '카카오', code: '035720', price: '42,300원', change: 0.9, reason: '핀테크 성장세', sparkline: '0,18 10,16 20,20 30,14 40,12 50,10 60,8' },
-  { rank: 5, name: 'LG에너지솔루션', code: '373220', price: '312,000원', change: -1.2, reason: '배터리 수주 소식', sparkline: '0,6 10,10 20,12 30,14 40,18 50,20 60,22' },
-])
+const recommendedStocks = ref([])
 
-const kospiNews = ref([
-  { id: 1, title: '외국인 순매수 4거래일 연속' },
-  { id: 2, title: '삼성전자 52주 신고가 경신' },
-  { id: 3, title: '코스피 2,650 돌파 시도' },
-])
-const kosdaqNews = ref([
-  { id: 1, title: '이차전지·바이오 테마 강세' },
-  { id: 2, title: '코스닥 외국인 순매수 지속' },
-  { id: 3, title: '중소형 성장주 관심 확대' },
-])
+const kospiNews = ref([])
+const kosdaqNews = ref([])
 
 // 지수 실시간 데이터
 const kospiData = ref(null)
