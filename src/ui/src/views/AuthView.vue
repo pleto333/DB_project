@@ -68,7 +68,7 @@ import axios from 'axios'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
-const BASE_URL = 'http://localhost:8080'
+const BASE_URL = 'http://localhost:8000'
 
 const mode = ref('login')
 

@@ -244,18 +244,34 @@ def create_web_app():
         return data
 
     _realtime_cache: dict[str, tuple[float, dict]] = {}
-    _REALTIME_CACHE_TTL = 60  # 1분 캐시
+    _REALTIME_CACHE_TTL = 10  # 10초 캐시
+
+    # 토큰 메모리 캐시 — expires_in=86305(약 24시간)이므로 23시간 유지
+    _token_cache: dict[str, Any] = {"token": "", "expires_at": 0.0}
+    _token_lock = asyncio.Lock()
+    _TOKEN_TTL = 23 * 3600
 
     async def _get_access_token() -> str:
-        token = os.getenv("LS_ACCESS_TOKEN", "").strip()
-        if not token:
-            from .config import is_missing_env_value
-            app_key = os.getenv("LS_APP_KEY", "").strip()
-            app_secret = os.getenv("LS_APP_SECRET", "").strip()
-            if not is_missing_env_value(app_key) and not is_missing_env_value(app_secret):
-                loop = asyncio.get_event_loop()
-                token = await loop.run_in_executor(None, fetch_ls_access_token, app_key, app_secret)
-        return token
+        now = time.time()
+        if _token_cache["token"] and now < _token_cache["expires_at"]:
+            return _token_cache["token"]
+        async with _token_lock:
+            # Lock 획득 후 다시 확인 (이미 다른 코루틴이 발급했을 수 있음)
+            now = time.time()
+            if _token_cache["token"] and now < _token_cache["expires_at"]:
+                return _token_cache["token"]
+            token = os.getenv("LS_ACCESS_TOKEN", "").strip()
+            if not token:
+                from .config import is_missing_env_value
+                app_key = os.getenv("LS_APP_KEY", "").strip()
+                app_secret = os.getenv("LS_APP_SECRET", "").strip()
+                if not is_missing_env_value(app_key) and not is_missing_env_value(app_secret):
+                    loop = asyncio.get_event_loop()
+                    token = await loop.run_in_executor(None, fetch_ls_access_token, app_key, app_secret)
+            if token:
+                _token_cache["token"] = token
+                _token_cache["expires_at"] = now + _TOKEN_TTL
+            return token
 
     @app.get("/stocks/realtime")
     async def get_stock_realtime_price(code: str) -> dict[str, Any]:
@@ -316,19 +332,11 @@ def create_web_app():
         if not code_list:
             return {}
 
-        access_token = os.getenv("LS_ACCESS_TOKEN", "").strip()
-        if not access_token:
-            from .config import is_missing_env_value
-            app_key = os.getenv("LS_APP_KEY", "").strip()
-            app_secret = os.getenv("LS_APP_SECRET", "").strip()
-            if not is_missing_env_value(app_key) and not is_missing_env_value(app_secret):
-                loop = asyncio.get_event_loop()
-                access_token = await loop.run_in_executor(None, fetch_ls_access_token, app_key, app_secret)
+        access_token = await _get_access_token()
 
         result: dict[str, list[float]] = {}
         now = time.time()
         loop = asyncio.get_event_loop()
-        first_api_call = True
         for code in code_list:
             cached = _price_cache.get(code)
             if cached and now - cached[0] < _PRICE_CACHE_TTL:
@@ -336,9 +344,6 @@ def create_web_app():
                 continue
             prices: list[float] = []
             if access_token:
-                if not first_api_call:
-                    await asyncio.sleep(1.2)
-                first_api_call = False
                 try:
                     prices = await loop.run_in_executor(None, fetch_stock_daily_prices, access_token, code, 10)
                 except Exception:

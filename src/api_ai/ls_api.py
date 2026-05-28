@@ -7,6 +7,8 @@ import json
 import os
 import re
 import ssl
+import threading
+import time
 from typing import Any
 
 import requests
@@ -27,6 +29,22 @@ from .config import (
     env_flag,
     is_missing_env_value,
 )
+
+
+# ── t8413 전역 rate limiter (0.3s 간격 강제) ───────────────────────────────
+_t8413_lock = threading.Lock()
+_t8413_last_call: float = 0.0
+_T8413_INTERVAL = 0.3  # 초
+
+def _t8413_throttle() -> None:
+    """t8413 호출 전 반드시 실행 — 전 스레드에 걸쳐 0.3s 간격 보장."""
+    global _t8413_last_call
+    with _t8413_lock:
+        now = time.time()
+        wait = _T8413_INTERVAL - (now - _t8413_last_call)
+        if wait > 0:
+            time.sleep(wait)
+        _t8413_last_call = time.time()
 
 
 def compact_json(data: Any, max_chars: int = MAX_FALLBACK_JSON_CHARS) -> str:
@@ -95,8 +113,23 @@ def _find_first_news_identifier(data: Any) -> dict[str, str]:
     return {}
 
 
+def _fix_mojibake(text: str) -> str:
+    """UTF-8 바이트를 Latin-1로 잘못 읽은 mojibake 복구 시도.
+    â€™ / Ã± 같은 패턴이 보이면 latin-1 → utf-8 재디코딩."""
+    # 대체 문자(U+FFFD) 우선 제거
+    text = text.replace('�', '')
+    # mojibake 징표: â€, Ã, Â 등 Latin-1 상위 바이트 연속 패턴
+    if re.search(r'[âãÃÂ]\S', text):
+        try:
+            text = text.encode('latin-1').decode('utf-8')
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            pass
+    return text
+
+
 def _clean_news_text(text: str) -> str:
-    cleaned = html.unescape(text)
+    cleaned = _fix_mojibake(text)
+    cleaned = html.unescape(cleaned)
     cleaned = re.sub(r"<[^>]+>", " ", cleaned)
     # t3102OutBlock 블록명 접두사 제거 (LS API 이진 응답 파싱 시 블록명이 필드값에 섞이는 문제)
     cleaned = re.sub(r'^t3102OutBlock\w*\s*', '', cleaned, flags=re.IGNORECASE)
@@ -112,6 +145,37 @@ def _clean_news_text(text: str) -> str:
     cleaned = re.sub(r'(\s+\^[^\s가-힣]+)', ' ', cleaned)           # 본문 중간 ^xxx 패턴
     cleaned = re.sub(r'\s+_[A-Z가-힣]{1,10}(\s|$)', ' ', cleaned)  # _AH, _飭 패턴
     cleaned = re.sub(r'\s+[A-Z]{1}\s+[A-Z]{2,}\s+\d.*$', '', cleaned)  # "C LIMIT 4..." 트레일링
+    # 이진 잔재: CJK 통합 한자 연속 2자 이상 (한국 뉴스 본문에 등장하는 한자 시퀀스 = 이진 잔재)
+    cleaned = re.sub(r'[一-鿿]{2,}', '', cleaned)
+    # 이진 잔재: 한글 음절 사이에 끼어든 단독 CJK 한자
+    cleaned = re.sub(r'(?<=[가-힣])\s*[一-鿿]\s*(?=[가-힣])', '', cleaned)
+    # 이진 잔재: 단독 한글 자모 (ㄱ-ㅎ, ㅏ-ㅣ) 가 이진 패턴 뒤에 나타나는 경우
+    cleaned = re.sub(r'[ㄱ-ㆎ][一-鿿]*', '', cleaned)
+    # 이진 잔재: 로마 숫자 단일 문자 (Ⅰ~ⅿ, U+2160-U+2188)
+    cleaned = re.sub(r'[Ⅰ-ↈ]', '', cleaned)
+    # 이진 잔재: 키릴(러시아어) 문자 — 한국 뉴스에 등장하면 100% 이진 프로토콜 잔재
+    cleaned = re.sub(r'[Ѐ-ԯ]', '', cleaned)
+    # 이진 잔재: 단독 CJK 문자 (공백이나 한글 인접 시 모두 제거)
+    cleaned = re.sub(r'(?<=\s)[一-鿿](?=\s)', ' ', cleaned)
+    cleaned = re.sub(r'(?<=[가-힣])[一-鿿]', '', cleaned)
+    cleaned = re.sub(r'[一-鿿](?=[가-힣])', '', cleaned)
+    # 이진 잔재: LS API 레코드 구분자 ◆◇◈ (문장 중간에서만 제거, 줄 시작 불릿은 유지)
+    cleaned = re.sub(r'(?<=[가-힣A-Za-z0-9])\s*[◆◇◈]\s*(?=[가-힣A-Za-z0-9])', ' ', cleaned)
+    cleaned = re.sub(r'[◆◇◈]', '', cleaned)  # 나머지 잔재 제거
+    # 이진 잔재: 화살표 블록 중 LS API 잔재로만 쓰이는 것만 제거 (← → ↑ ↓ 등)
+    # ●▶▷▲△▼▽ 등 뉴스 불릿/기호는 유지
+    cleaned = re.sub(r'[←↑↓↔↕↖↗↘↙⇒⇔⇒⇐⇑⇓⇕]', '', cleaned)
+    # 사진 캡션 제거: "/사진=..." 또는 "[사진=...]" 형식
+    cleaned = re.sub(r'[/\[]사진=[^\]\n]*[\]\n]?', '', cleaned)
+    cleaned = re.sub(r'\[?사진\s*=\s*[^\]\n]*\]?', '', cleaned)
+    # 기사 출처 표기 제거: "[언론사/기자명 기자(이메일)]" 형식
+    cleaned = re.sub(r'\[[^\]]{0,40}/[^\]]{0,40}\s*기자[^\]]*\]', '', cleaned)
+    # 하이퍼링크 안내 푸터 제거 (파이낸셜뉴스 등): "→ ..." 스타일
+    cleaned = re.sub(r'→[^\n]{0,100}\n?', '', cleaned)
+    # 언론사 저작권 고지 제거
+    cleaned = re.sub(r'※\s*저작권자[^\n]*\n?', '', cleaned)
+    # 기자 이메일 주소 제거
+    cleaned = re.sub(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', '', cleaned)
     cleaned = cleaned.replace("\r", "\n")
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
@@ -153,10 +217,20 @@ def _format_news_data(api_json: Any) -> str:
         elif isinstance(title_block, list) and title_block and isinstance(title_block[0], dict):
             title = _clean_title(str(title_block[0].get("sTitle", "")))
 
-        # 제목이 없으면 본문 첫 문장을 제목으로 대체 (저장 누락 방지)
-        if not title and body:
-            first_line = body.split('\n')[0].strip()
-            title = first_line[:80] if first_line else ""
+        # 제목이 없거나 너무 짧으면(5자 미만) 본문에서 의미 있는 첫 줄을 대체 제목으로 사용
+        # 사진 캡션·짧은 줄·기호로 시작하는 줄은 건너뜀
+        _meaningful_title = re.sub(r'[^\w가-힣]', '', title)  # 한글·영숫자만 세기
+        if len(_meaningful_title) < 5 and body:
+            for line in body.split('\n'):
+                line = line.strip()
+                # 한글이 5자 이상 있는 줄만 제목으로 채택
+                if (len(re.sub(r'[^가-힣]', '', line)) >= 5
+                        and not line.startswith('/')
+                        and not line.startswith('[')
+                        and not line.startswith('※')
+                        and not line.startswith('→')):
+                    title = line[:80]
+                    break
 
         stock_codes = []
         if isinstance(stock_block, list):
@@ -264,12 +338,13 @@ def build_t3102_input_block() -> dict[str, str]:
     return {}
 
 
-async def _fetch_latest_news_input_block_from_websocket(access_token: str) -> dict[str, str]:
+async def _fetch_news_keys_from_websocket(access_token: str, max_collect: int = 5) -> list[dict[str, str]]:
+    """WebSocket NWS 구독에서 최대 max_collect개의 뉴스 realkey를 수집."""
     try:
         import websockets
     except ImportError:
         print("websockets 패키지가 없습니다. pip install websockets")
-        return {}
+        return []
 
     ws_url = os.getenv("LS_NEWS_WS_URL", LS_DEFAULT_NEWS_WS_URL).strip() or LS_DEFAULT_NEWS_WS_URL
     tr_key = os.getenv("LS_NEWS_WS_TR_KEY", LS_DEFAULT_NEWS_WS_TR_KEY).strip() or LS_DEFAULT_NEWS_WS_TR_KEY
@@ -282,12 +357,17 @@ async def _fetch_latest_news_input_block_from_websocket(access_token: str) -> di
         "header": {"token": access_token, "tr_type": "3"},
         "body": {"tr_cd": "NWS", "tr_key": tr_key},
     }
+    collected: list[dict[str, str]] = []
+    seen: set[str] = set()
     try:
         async with websockets.connect(ws_url, ssl=ssl_context, ping_interval=20, close_timeout=5) as ws:
             await ws.send(json.dumps(subscribe_message, ensure_ascii=False))
-            print(f"LS 뉴스 웹소켓 NWS 구독을 시작했습니다. tr_key={tr_key}, timeout={timeout}s")
-            while True:
-                raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
+            print(f"LS NWS 구독 시작. 최대 {max_collect}건 수집 (timeout={timeout}s)")
+            while len(collected) < max_collect:
+                try:
+                    raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
+                except asyncio.TimeoutError:
+                    break  # 타임아웃 → 지금까지 수집한 것으로 종료
                 try:
                     message = json.loads(raw)
                 except json.JSONDecodeError:
@@ -297,23 +377,47 @@ async def _fetch_latest_news_input_block_from_websocket(access_token: str) -> di
                     continue
                 realkey = str(body.get("realkey", "")).strip()
                 title = str(body.get("title", "")).strip()
-                if realkey:
-                    if title:
-                        print(f"최신 뉴스 제목을 수신했습니다: {title}")
-                    print(f"NWS realkey를 t3102 뉴스번호로 사용합니다: {realkey}")
-                    return {"sNewsno": realkey}
+                if realkey and realkey not in seen:
+                    seen.add(realkey)
+                    collected.append({"sNewsno": realkey})
+                    print(f"  [{len(collected)}/{max_collect}] {title or realkey}")
                 rsp_msg = body.get("rsp_msg") or message.get("rsp_msg") or message.get("header", {}).get("rsp_msg")
                 if rsp_msg:
-                    print(f"LS 뉴스 웹소켓 메시지: {rsp_msg}")
-    except asyncio.TimeoutError:
-        print(f"{timeout}초 동안 신규 NWS 뉴스 패킷이 없어 뉴스번호를 가져오지 못했습니다.")
+                    print(f"LS NWS 메시지: {rsp_msg}")
     except Exception as exc:
         print(f"LS 뉴스 웹소켓 처리 중 오류: {exc}")
-    return {}
+    if not collected:
+        print(f"{timeout}초 동안 신규 NWS 뉴스 패킷이 없었습니다.")
+    return collected
 
 
 def fetch_latest_news_input_block(access_token: str) -> dict[str, str]:
-    return asyncio.run(_fetch_latest_news_input_block_from_websocket(access_token))
+    keys = asyncio.run(_fetch_news_keys_from_websocket(access_token, max_collect=1))
+    return keys[0] if keys else {}
+
+
+def _articles_to_combined(articles: list[str]) -> str:
+    """여러 [LS증권 API 뉴스본문 데이터] 블록을 번호형 목록으로 합쳐 반환."""
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    if len(articles) == 1:
+        return articles[0]
+    items = []
+    for art in articles:
+        title_m = re.search(r'제목:\s*(.+)', art)
+        body_m = re.search(r'본문:\n([\s\S]+)', art)
+        title = title_m.group(1).strip() if title_m else ''
+        body = body_m.group(1).strip() if body_m else ''
+        if title:
+            items.append((title, body))
+    if not items:
+        return articles[0]
+    lines = ["[LS증권 API 최신 뉴스 데이터]"]
+    for i, (title, body) in enumerate(items, 1):
+        lines.append(f"{i}. 날짜: {today}")
+        lines.append(f"   제목: {title}")
+        lines.append(f"   내용: {body[:800] if body else '본문 없음'}")
+        lines.append("")
+    return "\n".join(lines)
 
 
 def fetch_ls_news_body(access_token: str, news_api_url: str, input_block: dict[str, str]) -> str:
@@ -353,18 +457,22 @@ def fetch_ls_news() -> str:
     if manual_input_block:
         return fetch_ls_news_body(access_token, news_api_url, manual_input_block)
 
-    max_attempts = int(os.getenv("LS_NEWS_MAX_ATTEMPTS", "5"))
-    for attempt in range(1, max_attempts + 1):
-        print(f"본문 조회 가능한 최신 뉴스 패킷을 찾는 중입니다. attempt={attempt}/{max_attempts}")
-        input_block = fetch_latest_news_input_block(access_token)
-        if not input_block:
-            continue
+    max_collect = int(os.getenv("LS_NEWS_MAX_COLLECT", "5"))
+    print(f"NWS WebSocket에서 최대 {max_collect}건 뉴스 수집 시작...")
+    input_blocks = asyncio.run(_fetch_news_keys_from_websocket(access_token, max_collect))
+
+    articles: list[str] = []
+    for input_block in input_blocks:
         news_data = fetch_ls_news_body(access_token, news_api_url, input_block)
         if news_data.strip():
-            return news_data
+            articles.append(news_data)
 
-    print("본문 조회 가능한 뉴스 패킷을 찾지 못했습니다.")
-    return ""
+    if not articles:
+        print("본문 조회 가능한 뉴스 패킷을 찾지 못했습니다.")
+        return ""
+
+    print(f"뉴스 {len(articles)}건 수집 완료.")
+    return _articles_to_combined(articles)
 
 
 def fetch_global_indices() -> dict[str, Any]:
@@ -399,6 +507,7 @@ def fetch_global_indices() -> dict[str, Any]:
 
 
 def fetch_stock_daily_prices(access_token: str, stock_code: str, days: int = 10) -> list[float]:
+    _t8413_throttle()  # 전역 0.3s 간격 적용
     stock_api_url = os.getenv("LS_STOCK_API_URL", LS_DEFAULT_STOCK_API_URL).strip() or LS_DEFAULT_STOCK_API_URL
     payload = {
         "t8413InBlock": {
@@ -452,10 +561,12 @@ def is_market_open() -> bool:
 
 def fetch_stock_current_price(access_token: str, stock_code: str) -> dict[str, Any]:
     """장중: t1102 현재가 조회. 장외: t8413 최근 종가 fallback."""
+    # 한국 종목코드는 6자리 — AI가 앞 0을 빠뜨린 경우 보정
+    stock_code = str(stock_code).strip().zfill(6)
 
     def _from_daily() -> dict[str, Any]:
-        prices = fetch_stock_daily_prices(access_token, stock_code, days=2)
-        # 0 이하 값은 무효 데이터이므로 제거 (이미 fetch에서 필터되지만 방어적으로 재확인)
+        # days=5: 오늘 장 마감 직후 당일 데이터가 없어도 2개 확보 가능
+        prices = fetch_stock_daily_prices(access_token, stock_code, days=5)
         prices = [p for p in prices if p > 0]
         if len(prices) >= 2:
             price, prev = prices[-1], prices[-2]
@@ -463,12 +574,12 @@ def fetch_stock_current_price(access_token: str, stock_code: str) -> dict[str, A
             drate = round((price - prev) / prev * 100, 2) if prev else 0.0
             return {"code": stock_code, "price": price, "change": change, "drate": drate, "is_realtime": False}
         if len(prices) == 1:
-            return {"code": stock_code, "price": prices[0], "change": 0.0, "drate": 0.0, "is_realtime": False}
+            # 데이터 1건: 가격은 반환하되 drate=None으로 "데이터 부족" 표시
+            return {"code": stock_code, "price": prices[0], "change": None, "drate": None, "is_realtime": False}
         return {"code": stock_code, "price": None, "change": None, "drate": None, "is_realtime": False}
 
-    if not is_market_open():
-        return _from_daily()
-
+    # t1102는 장중·장외 모두 최종 체결가를 반환 — 항상 먼저 시도
+    # 장외에도 당일 종가를 돌려주므로 is_market_open() 체크 불필요
     # 장중: t1102 현재가
     market_url = os.getenv("LS_STOCK_MARKET_URL", LS_DEFAULT_STOCK_MARKET_URL).strip() or LS_DEFAULT_STOCK_MARKET_URL
     payload = {"t1102InBlock": {"shcode": stock_code}}
@@ -490,12 +601,14 @@ def fetch_stock_current_price(access_token: str, stock_code: str) -> dict[str, A
     try:
         price = float(str(out.get("price") or 0).replace(",", ""))
         change = float(str(out.get("change") or 0).replace(",", ""))
-        drate = float(str(out.get("drate") or 0).replace(",", "").replace("%", ""))
         sign = str(out.get("sign", "3"))
         # sign: 1=상한, 2=상승, 3=보합, 4=하락, 5=하한
         if sign in ("4", "5"):
-            drate = -abs(drate)
             change = -abs(change)
+        # drate는 t1102 응답에 없음 → change에서 역산
+        # price - change = 전일 종가, drate = change / 전일종가 * 100
+        prev_close = price - change
+        drate: float | None = round(change / prev_close * 100, 2) if prev_close > 0 and change != 0 else None
         if price <= 0:
             return _from_daily()
         return {"code": stock_code, "price": price, "change": change, "drate": drate, "is_realtime": True}

@@ -30,11 +30,31 @@ def _strip_article_text(text: str, is_title: bool = False) -> str:
     """저장 직전 기사 제목/본문에서 LS API 이진 잔재 제거."""
     if not text:
         return text
+    # 대체 문자(U+FFFD) 제거 + mojibake 복구
+    text = text.replace('�', '')
+    if re.search(r'[âãÃÂ]\S', text):
+        try:
+            text = text.encode('latin-1').decode('utf-8')
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            pass
     text = re.sub(r'^t3102OutBlock\w*\s*', '', text, flags=re.IGNORECASE)
     text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
     text = re.sub(r'\d{14}[가-힣A-Za-z0-9]*', '', text)
     text = re.sub(r'(\s+\^[^\s가-힣]+)', ' ', text)
     text = re.sub(r'\s+_[A-Z가-힣]{1,10}(\s|$)', ' ', text)
+    # 이진 잔재: CJK 한자 연속 2자 이상
+    text = re.sub(r'[一-鿿]{2,}', '', text)
+    # 이진 잔재: 한글 음절 사이에 낀 단독 CJK 한자
+    text = re.sub(r'(?<=[가-힣])\s*[一-鿿]\s*(?=[가-힣])', '', text)
+    # 이진 잔재: 단독 한글 자모 + CJK 조합
+    text = re.sub(r'[ㄱ-ㆎ][一-鿿]*', '', text)
+    # 이진 잔재: 키릴 문자
+    text = re.sub(r'[Ѐ-ԯ]', '', text)
+    # 이진 잔재: LS API 레코드 구분자 ◆◇◈ (문장 중간만 제거)
+    text = re.sub(r'(?<=[가-힣A-Za-z0-9])\s*[◆◇◈]\s*(?=[가-힣A-Za-z0-9])', ' ', text)
+    text = re.sub(r'[◆◇◈]', '', text)
+    # 이진 잔재 화살표만 제거 (●▶ 등 뉴스 불릿은 유지)
+    text = re.sub(r'[←↑↓↔↕↖↗↘↙⇒⇔⇐⇑⇓⇕]', '', text)
     if is_title:
         # 제목은 이진 시그니처(캐럿·언더스코어 등) 이후 전체 제거
         text = re.sub(r'\s*[\^_\|\\{}\[\]~`]+.*$', '', text)

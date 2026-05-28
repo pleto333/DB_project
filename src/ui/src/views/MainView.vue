@@ -66,7 +66,13 @@
         <!-- 주식 추천 탭 -->
         <div v-if="currentTab === 'recommend'">
           <div class="page-header">
-            <h2 class="page-title">오늘의 주식 추천</h2>
+            <div class="page-title-row">
+              <h2 class="page-title">오늘의 주식 추천</h2>
+              <span :class="['market-badge', isMarketOpen ? 'market-open' : 'market-closed']">
+                <span class="market-dot"></span>
+                {{ isMarketOpen ? '장 중' : '장 마감' }}
+              </span>
+            </div>
             <p class="page-sub">LS증권 뉴스 기반 AI 분석 결과</p>
           </div>
           <div class="two-col">
@@ -106,7 +112,7 @@
                       {{ stock.change > 0 ? '▲' : '▼' }} {{ Math.abs(stock.change) }}%
                     </p>
                   </div>
-                  <button class="bookmark-btn" @click="addToPortfolio(stock)"
+                  <button class="bookmark-btn" @click.stop="addToPortfolio(stock)"
                     :class="{ bookmarked: isBookmarked(stock.code) }"
                     :title="isBookmarked(stock.code) ? '포트폴리오에서 제거' : '포트폴리오에 추가'">
                     {{ isBookmarked(stock.code) ? '★' : '☆' }}
@@ -115,6 +121,20 @@
               </div>
             </div>
             <div class="col-right">
+              <!-- 시간/날짜/장 상태 인포바 -->
+              <div class="market-infobar">
+                <div class="infobar-left">
+                  <span class="infobar-date">{{ clockDate }}</span>
+                  <span class="infobar-sep">·</span>
+                  <span class="infobar-time">{{ clockTime }}</span>
+                  <span class="infobar-tz">KST</span>
+                </div>
+                <span :class="['infobar-status', isMarketOpen ? 'open' : 'closed']">
+                  <span class="infobar-dot"></span>
+                  {{ isMarketOpen ? '장 중' : '장 마감' }}
+                </span>
+              </div>
+
               <div class="market-card">
                 <div class="market-card-header">
                   <div>
@@ -178,10 +198,25 @@
             <p class="page-sub">LS증권 뉴스 API 실시간 데이터</p>
           </div>
           <div class="news-list" v-if="newsList.length > 0">
-            <div class="news-card" v-for="news in newsList" :key="news.id">
-              <div class="news-tag">{{ news.tag }}</div>
+            <div
+              class="news-card"
+              v-for="news in newsList"
+              :key="news.id"
+              @click="toggleNewsExpand(news.id)"
+              :class="{ 'news-card--expanded': expandedNewsId === news.id }"
+              style="cursor: pointer"
+            >
+              <div style="display:flex; justify-content:space-between; align-items:flex-start">
+                <div class="news-tag">{{ news.tag }}</div>
+                <span v-if="news.summary" style="font-size:11px; color:#94a3b8; margin-top:2px">
+                  {{ expandedNewsId === news.id ? '▲ 접기' : '▼ 본문' }}
+                </span>
+              </div>
               <p class="news-title">{{ news.title }}</p>
-              <p v-if="news.summary" class="news-summary">{{ news.summary }}</p>
+              <template v-if="news.summary">
+                <div v-if="expandedNewsId === news.id" class="news-body-full" v-html="formatNewsBody(news.summary)"></div>
+                <p v-else class="news-summary">{{ news.summary.slice(0, 80) }}{{ news.summary.length > 80 ? '…' : '' }}</p>
+              </template>
               <p class="news-time">{{ news.time }}</p>
             </div>
           </div>
@@ -287,7 +322,7 @@ function goToDetail(code) {
   router.push(`/stock/${code}`)
 }
 
-const BASE_URL = 'http://localhost:8080'
+const BASE_URL = 'http://localhost:8000'
 
 const currentTab = ref('recommend')
 
@@ -425,10 +460,61 @@ const tickerItems = ref([
   { name: '환율(USD)', value: '-', change: 0 },
 ])
 
+// 실시간 시계
+const currentTime = ref(new Date())
+let clockTimer = null
+
+const kstNow = computed(() => new Date(currentTime.value.toLocaleString('en-US', { timeZone: 'Asia/Seoul' })))
+
+const clockDate = computed(() => {
+  const d = kstNow.value
+  const days = ['일', '월', '화', '수', '목', '금', '토']
+  return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} (${days[d.getDay()]})`
+})
+
+const clockTime = computed(() => {
+  const d = kstNow.value
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`
+})
+
+// 한국 주식시장 개장 여부 (월~금 09:00~15:30 KST)
+const isMarketOpen = computed(() => {
+  const d = kstNow.value
+  const day = d.getDay()
+  if (day === 0 || day === 6) return false
+  const mins = d.getHours() * 60 + d.getMinutes()
+  return mins >= 9 * 60 && mins < 15 * 60 + 30
+})
+
 const recommendedStocks = ref([])
 
 const kospiNews = ref([])
 const kosdaqNews = ref([])
+
+// 뉴스 본문 텍스트 → 불릿·섹션 헤더 서식 적용 HTML 변환
+function formatNewsBody(text) {
+  if (!text) return ''
+  // LS API는 고정폭으로 줄을 자르기 때문에 단일 \n은 단어 중간에도 등장함.
+  // 이중 \n\n만 진짜 문단 구분으로 보고, 단일 \n은 공백으로 이어붙임.
+  const paragraphs = text
+    .replace(/\r\n/g, '\n')
+    .split(/\n{2,}/)
+    .map(block => block.replace(/\n/g, ' ').replace(/\s{2,}/g, ' ').trim())
+    .filter(Boolean)
+
+  return paragraphs.map(p => {
+    if (/^\[.{1,30}\]$/.test(p)) return `<p class="nb-section">${p}</p>`
+    if (/^[●▶▷▲△■□▪▫◎○•※]/.test(p)) return `<p class="nb-bullet">${p}</p>`
+    return `<p class="nb-para">${p}</p>`
+  }).join('')
+}
+
+// 뉴스 탭 상태
+const hasDbNews = ref(false)         // DB에서 실제 기사를 불러왔으면 true
+const expandedNewsId = ref(null)     // 클릭으로 본문 펼친 기사 id
+function toggleNewsExpand(id) {
+  expandedNewsId.value = expandedNewsId.value === id ? null : id
+}
 
 // 지수 실시간 데이터
 const kospiData = ref(null)
@@ -529,18 +615,27 @@ async function loadNewsArticles() {
       const res = await axios.get(`${BASE_URL}/news/latest`)
       const articles = res.data.articles || []
       if (articles.length > 0) {
-        newsList.value = articles.map(a => ({
-          id: a.article_id,
-          tag: a.publisher || 'LS증권',
-          title: a.title,
-          summary: a.summary || '',
-          time: timeAgo(a.published_at || a.collected_at),
-        }))
+        hasDbNews.value = true
+        newsList.value = articles
+          .map(a => ({
+            id: a.article_id,
+            tag: a.publisher || 'LS증권',
+            title: a.title,
+            summary: a.summary || '',
+            rawDate: a.published_at || a.collected_at,
+            time: timeAgo(a.published_at || a.collected_at),
+          }))
+          .sort((a, b) => {
+            if (!a.rawDate) return 1   // 날짜 없으면 뒤로
+            if (!b.rawDate) return -1
+            return new Date(b.rawDate) - new Date(a.rawDate)  // 최신순
+          })
         return  // 성공
       }
     } catch (_) {}
     if (attempt < MAX) await new Promise(r => setTimeout(r, 2000))
   }
+  hasDbNews.value = false  // DB 기사 없음 → AI 폴백 허용
 }
 
 function handleLogout() {
@@ -581,7 +676,7 @@ async function loadRecommendations() {
         // 기존 가격/스파크라인 보존 (60초 주기 갱신 시 초기화 방지)
         const existingMap = {}
         recommendedStocks.value.forEach(s => {
-          if (s.code) existingMap[s.code] = { price: s.price, change: s.change, sparkline: s.sparkline }
+          if (s.code) existingMap[s.code] = { price: s.price, change: s.change, sparkline: s.sparkline, prevClose: s.prevClose }
         })
 
         recommendedStocks.value = data.recommendations
@@ -597,6 +692,7 @@ async function loadRecommendations() {
               change: prev.change ?? 0,
               reason: r.reason || r.news_evidence || '',
               sparkline: prev.sparkline || '0,20 10,18 20,22 30,15 40,12 50,10 60,6',
+              prevClose: prev.prevClose ?? null,  // 실시간 변동률 계산용 전일종가 보존
             }
           })
         topThemesCount.value = Array.isArray(data.top_themes) ? data.top_themes.length : '-'
@@ -610,7 +706,7 @@ async function loadRecommendations() {
           kosdaqNews.value = mn.kosdaq.map((t, i) => ({ id: i + 1, title: t }))
 
         // newsList는 DB 뉴스(/news/latest)가 없을 때만 AI 분석 결과로 채움
-        if (newsList.value.length === 0) {
+        if (newsList.value.length === 0 && !hasDbNews.value) {
           const items = []
           if (data.overall_market_summary) {
             items.push({ id: 0, tag: '시장요약', title: data.overall_market_summary, time: updatedAt })
@@ -622,6 +718,8 @@ async function loadRecommendations() {
           })
           if (items.length > 0) newsList.value = items
         }
+        // 새 추천 종목의 스파크라인·등락률 갱신 (기존에 없던 종목 대응)
+        loadAllPrices()
         return  // 성공
       }
     } catch (_) {}
@@ -657,8 +755,15 @@ async function loadAllPrices() {
       if (prices.length < 2) return stock
       const last = prices[prices.length - 1]
       const prev = prices[prices.length - 2]
+      const sparkline = calcSparkline(prices)
+      // prevClose = prev (prices[-2]) = 어제 종가 (실시간 등락률 계산 기준)
+      // 이미 실시간 가격이 설정된 종목은 price/change를 덮어쓰지 않음
+      // (60초 loadRecommendations 주기에서 loadAllPrices 재호출 시 낡은 t8413 데이터로 덮어씌우기 방지)
+      if (stock.price !== '-') {
+        return { ...stock, sparkline, prevClose: prev }
+      }
       const change = parseFloat(((last - prev) / prev * 100).toFixed(2))
-      return { ...stock, price: last.toLocaleString('ko-KR') + '원', change, sparkline: calcSparkline(prices) }
+      return { ...stock, price: last.toLocaleString('ko-KR') + '원', change, sparkline, prevClose: prev }
     })
 
     portfolio.value = portfolio.value.map(stock => {
@@ -667,35 +772,65 @@ async function loadAllPrices() {
       if (prices.length < 2) return stock
       const last = prices[prices.length - 1]
       const prev = prices[prices.length - 2]
+      if (stock.price !== '-') {
+        return { ...stock, prevClose: prev }
+      }
       const change = parseFloat(((last - prev) / prev * 100).toFixed(2))
-      return { ...stock, price: last.toLocaleString('ko-KR') + '원', change }
+      return { ...stock, price: last.toLocaleString('ko-KR') + '원', change, prevClose: prev }
     })
   } catch (_) {}
 }
 
-// 실시간 현재가: 1초 간격으로 종목 하나씩 요청, 도착 즉시 UI 업데이트
+// 실시간 현재가: 종목 동시 병렬 요청, 도착 즉시 UI 업데이트
+let _realtimeRunning = false
 async function loadRealtimePrices() {
+  if (_realtimeRunning) return   // 이전 호출 아직 실행 중이면 스킵
+  _realtimeRunning = true
+  try {
   const recCodes = recommendedStocks.value.filter(s => s.code && !s.code.startsWith('TBD_')).map(s => s.code)
   const portCodes = portfolio.value.filter(s => s.code && !s.code.startsWith('TBD_')).map(s => s.code)
   const allCodes = [...new Set([...recCodes, ...portCodes])]
   if (!allCodes.length) return
 
-  for (let i = 0; i < allCodes.length; i++) {
-    if (i > 0) await new Promise(r => setTimeout(r, 1000))
-    const code = allCodes[i]
+  await Promise.all(allCodes.map(async code => {
     try {
       const res = await axios.get(`${BASE_URL}/stocks/realtime`, { params: { code } })
       const d = res.data
-      if (d.price == null || d.price <= 0) continue  // 0원 데이터 무시
-      const priceStr = Math.round(d.price).toLocaleString('ko-KR') + '원'
-      const change = parseFloat((d.drate ?? 0).toFixed(2))
-      recommendedStocks.value = recommendedStocks.value.map(s =>
-        s.code === code ? { ...s, price: priceStr, change } : s
-      )
-      portfolio.value = portfolio.value.map(s =>
-        s.code === code ? { ...s, price: priceStr, change } : s
-      )
+      if (d.price == null || d.price <= 0) return  // 0원 데이터 무시
+      const rawPrice = d.price
+      const priceStr = Math.round(rawPrice).toLocaleString('ko-KR') + '원'
+
+      // 등락률 계산 우선순위:
+      // 1순위: d.change(원단위 전일대비)로 전일종가 역산 → % 직접 계산
+      //        (drate 필드가 소형주에서 0으로 오는 버그 우회)
+      // 2순위: prevClose(t8413 prices[-2] 전일종가)로 직접 계산
+      // 3순위: d.drate 그대로 사용
+      const changeKrw = d.change ?? 0
+      let topChange = null
+      if (Math.abs(changeKrw) >= 1) {
+        const prevCloseCalc = rawPrice - changeKrw   // price - Δ = 전일 종가
+        if (prevCloseCalc > 0)
+          topChange = parseFloat((changeKrw / prevCloseCalc * 100).toFixed(2))
+      }
+
+      const updateStock = s => {
+        if (s.code !== code) return s
+        let ch = topChange
+        // 2순위: prevClose(t8413 전일종가)로 직접 계산
+        if (ch == null && s.prevClose > 0)
+          ch = parseFloat(((rawPrice - s.prevClose) / s.prevClose * 100).toFixed(2))
+        // 3순위: 서버에서 역산한 drate (null이면 데이터 없음 → 기존 change 유지)
+        if (ch == null && d.drate != null)
+          ch = parseFloat(Number(d.drate).toFixed(2))
+        // ch가 null이면 가격만 갱신, 기존 등락률 유지
+        return ch != null ? { ...s, price: priceStr, change: ch } : { ...s, price: priceStr }
+      }
+      recommendedStocks.value = recommendedStocks.value.map(updateStock)
+      portfolio.value = portfolio.value.map(updateStock)
     } catch (_) {}
+  }))
+  } finally {
+    _realtimeRunning = false
   }
 }
 
@@ -703,23 +838,31 @@ let refreshTimer = null
 let indicesTimer = null
 
 onMounted(async () => {
+  clockTimer = setInterval(() => { currentTime.value = new Date() }, 1000)
+  await loadNewsArticles()    // DB 뉴스를 먼저 확보 (AI 폴백 덮어씌우기 방지)
   await loadRecommendations()
   await loadMarketIndices()
   await loadPortfolio()
   await loadAllPrices()       // 스파크라인 + 전일 종가 (먼저 표시)
   loadRealtimePrices()        // 현재가 1초 간격 순차 업데이트
   loadGlobalIndices()
-  loadNewsArticles()          // DB에서 뉴스 기사 로드
   refreshTimer = setInterval(loadRecommendations, 60 * 1000)
   indicesTimer = setInterval(loadMarketIndices, 30 * 1000)
   setInterval(loadGlobalIndices, 5 * 60 * 1000)
-  // 현재가 2분마다 자동 갱신 (realtime 캐시 60s이므로 중복 호출 없음)
-  setInterval(loadRealtimePrices, 2 * 60 * 1000)
+  setInterval(loadRealtimePrices, 10 * 1000)
   // 뉴스는 10분마다 갱신
   setInterval(loadNewsArticles, 10 * 60 * 1000)
+  // 뉴스 "N분 전" 표시를 1분마다 재계산 (탭 백그라운드에서도 표시 최신화)
+  setInterval(() => {
+    newsList.value = newsList.value.map(n => ({
+      ...n,
+      time: timeAgo(n.rawDate),
+    }))
+  }, 60 * 1000)
 })
 
 onUnmounted(() => {
+  if (clockTimer) clearInterval(clockTimer)
   if (refreshTimer) clearInterval(refreshTimer)
   if (indicesTimer) clearInterval(indicesTimer)
 })
@@ -734,6 +877,22 @@ onUnmounted(() => {
 }
 
 /* 티커 */
+.market-infobar {
+  display: flex; align-items: center; justify-content: space-between;
+  background: #f8faff; border: 1px solid #e2e8f0; border-radius: 12px;
+  padding: 10px 16px; margin-bottom: 12px;
+}
+.infobar-left { display: flex; align-items: center; gap: 6px; }
+.infobar-date { font-size: 13px; color: #475569; font-weight: 500; }
+.infobar-sep  { color: #cbd5e1; }
+.infobar-time { font-size: 16px; font-weight: 700; color: #0f172a; font-variant-numeric: tabular-nums; letter-spacing: 0.5px; }
+.infobar-tz   { font-size: 10px; color: #94a3b8; font-weight: 500; }
+.infobar-status { display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; }
+.infobar-status.open   { background: rgba(52,211,153,0.15); color: #059669; }
+.infobar-status.closed { background: rgba(248,113,113,0.12); color: #dc2626; }
+.infobar-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.infobar-status.open .infobar-dot { animation: pulse-dot 1.5s infinite; }
+
 .ticker-bar {
   width: 100%; background: #1e293b; color: #fff;
   height: 40px; overflow: hidden; display: flex;
@@ -798,8 +957,15 @@ onUnmounted(() => {
 /* 메인 */
 .content { flex: 1; padding: 32px 32px 32px 72px; width: 100%; }
 .page-header { margin-bottom: 20px; }
-.page-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+.page-title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.page-title { font-size: 22px; font-weight: 700; margin: 0; }
 .page-sub { font-size: 13px; color: #94a3b8; }
+.market-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.market-open  { background: rgba(52,211,153,0.15); color: #34d399; }
+.market-closed{ background: rgba(248,113,113,0.15); color: #f87171; }
+.market-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.market-open .market-dot { animation: pulse-dot 1.5s infinite; }
+@keyframes pulse-dot { 0%,100%{ opacity:1; } 50%{ opacity:0.3; } }
 
 .two-col { display: grid; grid-template-columns: 1fr 300px; gap: 20px; align-items: start; }
 .summary-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
@@ -919,10 +1085,16 @@ onUnmounted(() => {
 .news-card:hover { border-color: #93c5fd; }
 .news-tag { display: inline-block; background: #eff6ff; color: #2563eb; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; margin-bottom: 10px; }
 .news-title { font-size: 15px; font-weight: 500; margin-bottom: 6px; }
-.news-summary { font-size: 13px; color: #64748b; line-height: 1.6; margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.news-summary { font-size: 13px; color: #64748b; line-height: 1.6; margin-bottom: 8px; }
+.news-body-full { font-size: 13px; color: #334155; line-height: 1.8; margin-bottom: 8px; white-space: pre-line; border-top: 1px solid #f1f5f9; padding-top: 10px; }
+.news-card--expanded { border-color: #93c5fd; background: #f8faff; }
 .news-time { font-size: 12px; color: #94a3b8; }
 
 .empty-state { text-align: center; padding: 80px; color: #94a3b8; font-size: 15px; line-height: 2; }
 .empty-state p:first-child { font-size: 48px; }
 .empty-sub { font-size: 13px; }
+/* 뉴스 본문 서식 */
+.nb-para   { font-size: 13px; color: #334155; line-height: 1.9; margin: 0 0 10px; }
+.nb-bullet { font-size: 13px; color: #475569; line-height: 1.9; margin: 0 0 6px; padding-left: 4px; }
+.nb-section{ font-size: 12px; font-weight: 700; color: #2563eb; margin: 12px 0 6px; }
 </style>

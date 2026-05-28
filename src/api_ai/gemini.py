@@ -163,6 +163,23 @@ def _strip_json_code_block(text: str) -> str:
     return cleaned.strip()
 
 
+def _repair_gemini_json(text: str) -> str:
+    """Gemini가 가끔 문자열 값을 쪼개서 내보낼 때 수정.
+    "field": "val1", "val2"  →  "field": "val1 val2"
+    콜론이 뒤에 없는 경우에만 병합 (key 오인 방지).
+    """
+    for _ in range(5):  # 연속으로 3개 이상 이어질 수 있으니 최대 5회
+        fixed = re.sub(
+            r'("(?:[^"\\]|\\.)*"),\s*("(?:[^"\\]|\\.)*")(?!\s*:)',
+            lambda m: '"' + m.group(1)[1:-1] + ' ' + m.group(2)[1:-1] + '"',
+            text,
+        )
+        if fixed == text:
+            break
+        text = fixed
+    return text
+
+
 def _extract_json_object(text: str) -> str:
     cleaned = _strip_json_code_block(text)
     start = cleaned.find("{")
@@ -227,6 +244,11 @@ def analyze_news_with_gemini(news_data: str) -> dict:
     cleaned_text = _extract_json_object(raw_text)
     try:
         return json.loads(cleaned_text)
-    except json.JSONDecodeError as exc:
-        print(f"Gemini 응답을 JSON으로 파싱하지 못했습니다: {exc}\n[원본]\n{raw_text}")
-        raise RuntimeError(f"Gemini JSON 파싱 실패: {exc}") from exc
+    except json.JSONDecodeError:
+        # Gemini가 문자열 값을 쪼개는 경우 repair 후 재시도
+        repaired = _repair_gemini_json(cleaned_text)
+        try:
+            return json.loads(repaired)
+        except json.JSONDecodeError as exc:
+            print(f"Gemini 응답을 JSON으로 파싱하지 못했습니다: {exc}\n[원본]\n{raw_text}")
+            raise RuntimeError(f"Gemini JSON 파싱 실패: {exc}") from exc
