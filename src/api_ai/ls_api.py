@@ -98,6 +98,12 @@ def _find_first_news_identifier(data: Any) -> dict[str, str]:
 def _clean_news_text(text: str) -> str:
     cleaned = html.unescape(text)
     cleaned = re.sub(r"<[^>]+>", " ", cleaned)
+    # t3102OutBlock 블록명 접두사 제거 (LS API 이진 응답 파싱 시 블록명이 필드값에 섞이는 문제)
+    cleaned = re.sub(r'^t3102OutBlock\w*\s*', '', cleaned, flags=re.IGNORECASE)
+    # C0 제어문자 제거 (탭·LF·CR 제외)
+    cleaned = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', cleaned)
+    # LS API 고정폭 이진 잔재: 14자리 날짜코드 + 언론사명 패턴 제거 (예: 20260528111805한국경제)
+    cleaned = re.sub(r'\d{14}[가-힣A-Za-z0-9]*', '', cleaned)
     cleaned = cleaned.replace("\r", "\n")
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
@@ -117,9 +123,9 @@ def _format_news_data(api_json: Any) -> str:
         body = _clean_news_text(body)
         title = ""
         if isinstance(title_block, dict):
-            title = str(title_block.get("sTitle", "")).strip()
+            title = _clean_news_text(str(title_block.get("sTitle", "")))
         elif isinstance(title_block, list) and title_block and isinstance(title_block[0], dict):
-            title = str(title_block[0].get("sTitle", "")).strip()
+            title = _clean_news_text(str(title_block[0].get("sTitle", "")))
         stock_codes = []
         if isinstance(stock_block, list):
             stock_codes = [
