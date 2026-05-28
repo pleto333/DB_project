@@ -140,11 +140,24 @@ def _format_news_data(api_json: Any) -> str:
     if isinstance(body_block, list):
         body = "\n".join(str(item.get("sBody", "")) for item in body_block if isinstance(item, dict))
         body = _clean_news_text(body)
+
+        # HTML/CSS 응답 감지: LS API가 오류 HTML 페이지를 반환한 경우 무시
+        _html_signals = ("font-size:", "line-height:", "font-family:", "@media", "body,td,", "border:0px")
+        if any(sig in body for sig in _html_signals):
+            print("[뉴스파싱] HTML 오류 응답 감지 — 해당 뉴스 패킷 무시.")
+            return ""
+
         title = ""
         if isinstance(title_block, dict):
             title = _clean_title(str(title_block.get("sTitle", "")))
         elif isinstance(title_block, list) and title_block and isinstance(title_block[0], dict):
             title = _clean_title(str(title_block[0].get("sTitle", "")))
+
+        # 제목이 없으면 본문 첫 문장을 제목으로 대체 (저장 누락 방지)
+        if not title and body:
+            first_line = body.split('\n')[0].strip()
+            title = first_line[:80] if first_line else ""
+
         stock_codes = []
         if isinstance(stock_block, list):
             stock_codes = [
