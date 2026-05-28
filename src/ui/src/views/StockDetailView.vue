@@ -45,8 +45,9 @@
       <div :class="['analysis-card', stock.recommend ? 'recommend' : 'not-recommend']">
         <div class="analysis-header">
           <div class="analysis-badge">
-            <span class="badge-icon">{{ stock.recommend ? '🤖' : '🤖' }}</span>
+            <span class="badge-icon">🤖</span>
             <span>AI 분석 결과</span>
+            <span v-if="stock.modelName" class="model-name-badge">{{ stock.modelName }}</span>
           </div>
           <div :class="['verdict-badge', stock.recommend ? 'buy' : 'sell']">
             {{ stock.recommend ? '✓ 매수 추천' : '✕ 매수 비추천' }}
@@ -152,6 +153,7 @@ const stock = ref({
   change: 0,
   recommend: false,
   confidence: 0,
+  modelName: '',
   summary: '',
   positives: [],
   negatives: [],
@@ -204,6 +206,7 @@ onMounted(async () => {
         market: rec.market || 'KOSPI',
         recommend: rec.recommendation === 'BUY',
         confidence: confidenceMap[rec.confidence] ?? 60,
+        modelName: data.model_name || '',
         summary: rec.reason,
         positives: [rec.expected_momentum].filter(Boolean),
         negatives: [rec.risk].filter(Boolean),
@@ -374,6 +377,7 @@ function goBack() {
 .analysis-card.not-recommend { background: #f0f4ff; border-color: #bfdbfe; }
 .analysis-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .analysis-badge { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: #475569; }
+.model-name-badge { font-size: 11px; font-weight: 500; color: #94a3b8; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 20px; padding: 2px 8px; }
 .badge-icon { font-size: 20px; }
 .verdict-badge {
   padding: 8px 20px; border-radius: 20px; font-size: 14px; font-weight: 700;

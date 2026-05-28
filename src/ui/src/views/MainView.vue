@@ -39,7 +39,7 @@
           <div class="user-avatar">{{ userInitial }}</div>
           <div>
             <p class="user-name">{{ username }}</p>
-            <p class="user-role">일반 회원</p>
+            <p class="user-role">가입일 {{ userJoinedAt }}</p>
           </div>
         </div>
         <nav class="sidebar-nav">
@@ -306,6 +306,13 @@ const sidebarOpen = ref(false)
 const username = ref(localStorage.getItem('username') || '사용자')
 const userId = ref(localStorage.getItem('user_id') || '')
 const userInitial = computed(() => username.value.charAt(0))
+const userJoinedAt = computed(() => {
+  const raw = localStorage.getItem('user_created_at') || ''
+  if (!raw) return '-'
+  const d = new Date(raw)
+  if (isNaN(d.getTime())) return '-'
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`
+})
 
 // ── 검색 ──
 const searchQuery = ref('')
@@ -539,6 +546,7 @@ async function loadNewsArticles() {
 function handleLogout() {
   localStorage.removeItem('user_id')
   localStorage.removeItem('username')
+  localStorage.removeItem('user_created_at')
   router.push('/')
 }
 

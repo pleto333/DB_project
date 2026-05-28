@@ -218,6 +218,7 @@ def create_web_app():
                 "user_id": str(user["user_id"]),
                 "username": user["username"],
                 "email": user["email"],
+                "created_at": str(user["created_at"]) if user.get("created_at") else "",
             }
         except HTTPException:
             raise

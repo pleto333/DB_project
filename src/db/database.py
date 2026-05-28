@@ -217,7 +217,7 @@ def get_latest_recommendations_json() -> dict[str, Any]:
 
 def get_user_by_username(username: str) -> dict[str, Any] | None:
     """Return user row by username, or None if not found."""
-    sql = "SELECT user_id, username, email, password_hash FROM users WHERE username = %s"
+    sql = "SELECT user_id, username, email, password_hash, created_at FROM users WHERE username = %s"
 
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
@@ -239,7 +239,7 @@ def get_latest_analysis_json() -> dict[str, Any]:
     try:
         # ① 최신 분석 메타데이터
         cursor.execute("""
-            SELECT analysis_id, response_json, analyzed_at
+            SELECT analysis_id, response_json, analyzed_at, model_name
             FROM llm_analysis
             ORDER BY analyzed_at DESC, analysis_id DESC
             LIMIT 1
@@ -309,6 +309,7 @@ def get_latest_analysis_json() -> dict[str, Any]:
     return {
         "analysis_id":           analysis_id,
         "analyzed_at":           analyzed_at,
+        "model_name":            meta.get("model_name", ""),
         "analysis_date":         response_json.get("analysis_date", ""),
         "top_themes":            response_json.get("top_themes", []),
         "market_news":           response_json.get("market_news", {}),
