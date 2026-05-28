@@ -118,8 +118,10 @@ def save_analysis_to_db(result: dict[str, Any], news_data: str = "") -> int | No
 
             if not stock_name:
                 continue
-            if not stock_code:
-                stock_code = f"TBD_{rank_no}"
+            # 종목코드가 없거나 숫자 코드가 아니면 저장하지 않음 (ETF/테마 추상 항목 차단)
+            if not stock_code or not stock_code.isdigit():
+                print(f"[분석저장] rank {rank_no} '{stock_name}' — 유효한 종목코드 없음, 건너뜀")
+                continue
 
             market_enum = market_raw if market_raw in ("KOSPI", "KOSDAQ", "NASDAQ", "NYSE") else "OTHER"
             stock_id = add_stock(stock_code, stock_name, market_enum)

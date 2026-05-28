@@ -584,19 +584,21 @@ async function loadRecommendations() {
           if (s.code) existingMap[s.code] = { price: s.price, change: s.change, sparkline: s.sparkline }
         })
 
-        recommendedStocks.value = data.recommendations.map(r => {
-          const code = r.stock_code || String(r.rank)
-          const prev = existingMap[code] || {}
-          return {
-            rank: r.rank,
-            name: r.stock_name,
-            code,
-            price: prev.price || '-',
-            change: prev.change ?? 0,
-            reason: r.reason || r.news_evidence || '',
-            sparkline: prev.sparkline || '0,20 10,18 20,22 30,15 40,12 50,10 60,6',
-          }
-        })
+        recommendedStocks.value = data.recommendations
+          .filter(r => r.stock_code && !r.stock_code.startsWith('TBD_'))  // 추상 항목 제거
+          .map(r => {
+            const code = r.stock_code
+            const prev = existingMap[code] || {}
+            return {
+              rank: r.rank,
+              name: r.stock_name,
+              code,
+              price: prev.price || '-',
+              change: prev.change ?? 0,
+              reason: r.reason || r.news_evidence || '',
+              sparkline: prev.sparkline || '0,20 10,18 20,22 30,15 40,12 50,10 60,6',
+            }
+          })
         topThemesCount.value = Array.isArray(data.top_themes) ? data.top_themes.length : '-'
         analysisUpdatedAt.value = updatedAt
 
