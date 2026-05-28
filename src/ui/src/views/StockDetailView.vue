@@ -179,66 +179,83 @@ function calcDetailSparkline(prices) {
 }
 
 onMounted(async () => {
-  try {
-    const res = await axios.get(`${BASE_URL}/recommendations/latest`)
-    const data = res.data
-    if (!data || !data.recommendations) return
-
-    const rec = data.recommendations.find(r =>
-      r.stock_code === route.params.code || String(r.rank) === route.params.code
-    )
-    if (!rec) return
-
-    const confidenceMap = { '상': 85, '중': 60, '하': 35 }
-    stock.value = {
-      ...stock.value,
-      name: rec.stock_name,
-      code: rec.stock_code,
-      market: rec.market || 'KOSPI',
-      recommend: rec.recommendation === 'BUY',
-      confidence: confidenceMap[rec.confidence] ?? 60,
-      summary: rec.reason,
-      positives: [rec.expected_momentum].filter(Boolean),
-      negatives: [rec.risk].filter(Boolean),
-      detailAnalysis: rec.reason + (rec.news_evidence ? '\n\n[분석 근거] ' + rec.news_evidence : ''),
-      // 더미 데이터 방지: news_evidence로 초기화 → DB 뉴스 조회 후 덮어씀
-      relatedNews: rec.news_evidence ? [{
-        id: 0,
-        sentiment: rec.recommendation === 'BUY' ? 'positive' : 'neutral',
-        time: data.analysis_date || '-',
-        title: `[AI 분석] ${rec.stock_name}`,
-        desc: rec.news_evidence,
-      }] : [],
+  // AI 추천 데이터 로드 (빈 결과 시 최대 3회 재시도)
+  const MAX_REC = 3
+  for (let attempt = 1; attempt <= MAX_REC; attempt++) {
+    try {
+      const res = await axios.get(`${BASE_URL}/recommendations/latest`)
+      const data = res.data
+      if (!data || !data.recommendations) {
+        if (attempt < MAX_REC) { await new Promise(r => setTimeout(r, 2000)); continue }
+        break
+      }
+      const rec = data.recommendations.find(r =>
+        r.stock_code === route.params.code || String(r.rank) === route.params.code
+      )
+      if (!rec) {
+        if (attempt < MAX_REC) { await new Promise(r => setTimeout(r, 2000)); continue }
+        break
+      }
+      const confidenceMap = { '상': 85, '중': 60, '하': 35 }
+      stock.value = {
+        ...stock.value,
+        name: rec.stock_name,
+        code: rec.stock_code,
+        market: rec.market || 'KOSPI',
+        recommend: rec.recommendation === 'BUY',
+        confidence: confidenceMap[rec.confidence] ?? 60,
+        summary: rec.reason,
+        positives: [rec.expected_momentum].filter(Boolean),
+        negatives: [rec.risk].filter(Boolean),
+        detailAnalysis: rec.reason + (rec.news_evidence ? '\n\n[분석 근거] ' + rec.news_evidence : ''),
+        // 더미 데이터 방지: news_evidence로 초기화 → DB 뉴스 조회 후 덮어씀
+        relatedNews: rec.news_evidence ? [{
+          id: 0,
+          sentiment: rec.recommendation === 'BUY' ? 'positive' : 'neutral',
+          time: data.analysis_date || '-',
+          title: `[AI 분석] ${rec.stock_name}`,
+          desc: rec.news_evidence,
+        }] : [],
+      }
+      break  // 성공
+    } catch (_) {
+      if (attempt < MAX_REC) await new Promise(r => setTimeout(r, 2000))
     }
-  } catch (_) {
-    // DB 미연결 시 더미 데이터 유지
   }
 
   // 주가 데이터 로드
   const code = stock.value.code
   if (code && !code.startsWith('TBD_')) {
-    // 1) 스파크라인: t8413 일봉 (차트용)
-    try {
-      const res = await axios.get(`${BASE_URL}/stocks/price`, { params: { codes: code } })
-      const prices = res.data[code]
-      if (prices && prices.length >= 2) {
-        const { line, area } = calcDetailSparkline(prices)
-        stock.value = { ...stock.value, chartLine: line, areaLine: area }
-      }
-    } catch (_) {}
-
-    // 2) 현재가: t1102 (장중) / t8413 종가 (장외)
-    try {
-      const res = await axios.get(`${BASE_URL}/stocks/realtime`, { params: { code } })
-      const d = res.data
-      if (d.price != null) {
-        stock.value = {
-          ...stock.value,
-          price: Math.round(d.price).toLocaleString('ko-KR') + '원',
-          change: parseFloat((d.drate ?? 0).toFixed(2)),
+    // 1) 스파크라인: t8413 일봉 (차트용, 빈 결과 시 최대 3회 재시도)
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await axios.get(`${BASE_URL}/stocks/price`, { params: { codes: code } })
+        const prices = res.data[code]
+        if (prices && prices.length >= 2) {
+          const { line, area } = calcDetailSparkline(prices)
+          stock.value = { ...stock.value, chartLine: line, areaLine: area }
+          break  // 성공
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+      if (attempt < 3) await new Promise(r => setTimeout(r, 2000))
+    }
+
+    // 2) 현재가: t1102 (장중) / t8413 종가 (장외, 빈 결과 시 최대 3회 재시도)
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await axios.get(`${BASE_URL}/stocks/realtime`, { params: { code } })
+        const d = res.data
+        if (d.price != null) {
+          stock.value = {
+            ...stock.value,
+            price: Math.round(d.price).toLocaleString('ko-KR') + '원',
+            change: parseFloat((d.drate ?? 0).toFixed(2)),
+          }
+          break  // 성공
+        }
+      } catch (_) {}
+      if (attempt < 3) await new Promise(r => setTimeout(r, 2000))
+    }
   }
 
   // news_articles 테이블에서 관련 뉴스 조회 (빈 결과 시 최대 3회 재시도)

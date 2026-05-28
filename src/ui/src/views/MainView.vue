@@ -453,70 +453,87 @@ function formatGlobalPrice(name, price) {
 }
 
 async function loadGlobalIndices() {
-  try {
-    const res = await axios.get(`${BASE_URL}/market/global`)
-    const data = res.data
-
-    tickerItems.value = tickerItems.value.map(item => {
-      const d = data[item.name]
-      if (!d) return item
-      if (item.name === 'KOSPI' && kospiData.value?.value) return item
-      if (item.name === 'KOSDAQ' && kosdaqData.value?.value) return item
-      return { ...item, value: formatGlobalPrice(item.name, d.price), change: d.change }
-    })
-
-    // 마켓 카드: LS 실시간 없을 때 yfinance 종가로 표시
-    if (!kospiData.value?.value && data['KOSPI']) {
-      const d = data['KOSPI']
-      kospiData.value = { value: String(d.price), drate: String(Math.abs(d.change)), sign: d.change >= 0 ? '2' : '5', change: String(Math.abs(d.change)) }
-    }
-    if (!kosdaqData.value?.value && data['KOSDAQ']) {
-      const d = data['KOSDAQ']
-      kosdaqData.value = { value: String(d.price), drate: String(Math.abs(d.change)), sign: d.change >= 0 ? '2' : '5', change: String(Math.abs(d.change)) }
-    }
-  } catch (_) {}
+  const MAX = 3
+  for (let attempt = 1; attempt <= MAX; attempt++) {
+    try {
+      const res = await axios.get(`${BASE_URL}/market/global`)
+      const data = res.data
+      if (data && Object.keys(data).length > 0) {
+        tickerItems.value = tickerItems.value.map(item => {
+          const d = data[item.name]
+          if (!d) return item
+          if (item.name === 'KOSPI' && kospiData.value?.value) return item
+          if (item.name === 'KOSDAQ' && kosdaqData.value?.value) return item
+          return { ...item, value: formatGlobalPrice(item.name, d.price), change: d.change }
+        })
+        // 마켓 카드: LS 실시간 없을 때 yfinance 종가로 표시
+        if (!kospiData.value?.value && data['KOSPI']) {
+          const d = data['KOSPI']
+          kospiData.value = { value: String(d.price), drate: String(Math.abs(d.change)), sign: d.change >= 0 ? '2' : '5', change: String(Math.abs(d.change)) }
+        }
+        if (!kosdaqData.value?.value && data['KOSDAQ']) {
+          const d = data['KOSDAQ']
+          kosdaqData.value = { value: String(d.price), drate: String(Math.abs(d.change)), sign: d.change >= 0 ? '2' : '5', change: String(Math.abs(d.change)) }
+        }
+        return  // 성공
+      }
+    } catch (_) {}
+    if (attempt < MAX) await new Promise(r => setTimeout(r, 2000))
+  }
 }
 
 async function loadMarketIndices() {
-  try {
-    const res = await axios.get(`${BASE_URL}/market/indices`)
-    const data = res.data
-    if (data.kospi?.value) {
-      kospiData.value = data.kospi
-      const d = formatIndexDisplay(data.kospi)
-      const isUp = data.kospi.sign === '1' || data.kospi.sign === '2'
-      const drate = parseFloat(data.kospi.drate || '0')
-      tickerItems.value = tickerItems.value.map((item, i) =>
-        i === 0 ? { name: 'KOSPI', value: d.value, change: isUp ? drate : -drate } : item
-      )
-    }
-    if (data.kosdaq?.value) {
-      kosdaqData.value = data.kosdaq
-      const d = formatIndexDisplay(data.kosdaq)
-      const isUp = data.kosdaq.sign === '1' || data.kosdaq.sign === '2'
-      const drate = parseFloat(data.kosdaq.drate || '0')
-      tickerItems.value = tickerItems.value.map((item, i) =>
-        i === 1 ? { name: 'KOSDAQ', value: d.value, change: isUp ? drate : -drate } : item
-      )
-    }
-  } catch (_) {}
+  const MAX = 3
+  for (let attempt = 1; attempt <= MAX; attempt++) {
+    try {
+      const res = await axios.get(`${BASE_URL}/market/indices`)
+      const data = res.data
+      if (data.kospi?.value || data.kosdaq?.value) {
+        if (data.kospi?.value) {
+          kospiData.value = data.kospi
+          const d = formatIndexDisplay(data.kospi)
+          const isUp = data.kospi.sign === '1' || data.kospi.sign === '2'
+          const drate = parseFloat(data.kospi.drate || '0')
+          tickerItems.value = tickerItems.value.map((item, i) =>
+            i === 0 ? { name: 'KOSPI', value: d.value, change: isUp ? drate : -drate } : item
+          )
+        }
+        if (data.kosdaq?.value) {
+          kosdaqData.value = data.kosdaq
+          const d = formatIndexDisplay(data.kosdaq)
+          const isUp = data.kosdaq.sign === '1' || data.kosdaq.sign === '2'
+          const drate = parseFloat(data.kosdaq.drate || '0')
+          tickerItems.value = tickerItems.value.map((item, i) =>
+            i === 1 ? { name: 'KOSDAQ', value: d.value, change: isUp ? drate : -drate } : item
+          )
+        }
+        return  // 성공
+      }
+    } catch (_) {}
+    if (attempt < MAX) await new Promise(r => setTimeout(r, 2000))
+  }
 }
 const newsList = ref([])
 
 async function loadNewsArticles() {
-  try {
-    const res = await axios.get(`${BASE_URL}/news/latest`)
-    const articles = res.data.articles || []
-    if (articles.length > 0) {
-      newsList.value = articles.map(a => ({
-        id: a.article_id,
-        tag: a.publisher || 'LS증권',
-        title: a.title,
-        summary: a.summary || '',
-        time: timeAgo(a.published_at || a.collected_at),
-      }))
-    }
-  } catch (_) {}
+  const MAX = 3
+  for (let attempt = 1; attempt <= MAX; attempt++) {
+    try {
+      const res = await axios.get(`${BASE_URL}/news/latest`)
+      const articles = res.data.articles || []
+      if (articles.length > 0) {
+        newsList.value = articles.map(a => ({
+          id: a.article_id,
+          tag: a.publisher || 'LS증권',
+          title: a.title,
+          summary: a.summary || '',
+          time: timeAgo(a.published_at || a.collected_at),
+        }))
+        return  // 성공
+      }
+    } catch (_) {}
+    if (attempt < MAX) await new Promise(r => setTimeout(r, 2000))
+  }
 }
 
 function handleLogout() {
@@ -527,69 +544,79 @@ function handleLogout() {
 
 async function loadPortfolio() {
   if (!userId.value) return
-  try {
-    const res = await axios.get(`${BASE_URL}/portfolio`, { params: { user_id: userId.value } })
-    portfolio.value = (res.data.items || []).map(item => ({
-      name: item.stock_name,
-      code: item.stock_code,
-      price: '-',
-      change: 0,
-      addedAt: item.added_at || '',   // portfolio.added_at 연결
-    }))
-  } catch (_) {}
+  const MAX = 3
+  for (let attempt = 1; attempt <= MAX; attempt++) {
+    try {
+      const res = await axios.get(`${BASE_URL}/portfolio`, { params: { user_id: userId.value } })
+      portfolio.value = (res.data.items || []).map(item => ({
+        name: item.stock_name,
+        code: item.stock_code,
+        price: '-',
+        change: 0,
+        addedAt: item.added_at || '',   // portfolio.added_at 연결
+      }))
+      return  // 성공
+    } catch (_) {}
+    if (attempt < MAX) await new Promise(r => setTimeout(r, 2000))
+  }
 }
 
 async function loadRecommendations() {
-  try {
-    const res = await axios.get(`${BASE_URL}/recommendations/latest`)
-    const data = res.data
-    if (data && Array.isArray(data.recommendations) && data.recommendations.length > 0) {
-      const updatedAt = timeAgo(data.analyzed_at)
+  const MAX = 3
+  for (let attempt = 1; attempt <= MAX; attempt++) {
+    try {
+      const res = await axios.get(`${BASE_URL}/recommendations/latest`)
+      const data = res.data
+      if (data && Array.isArray(data.recommendations) && data.recommendations.length > 0) {
+        const updatedAt = timeAgo(data.analyzed_at)
 
-      // 기존 가격/스파크라인 보존 (60초 주기 갱신 시 초기화 방지)
-      const existingMap = {}
-      recommendedStocks.value.forEach(s => {
-        if (s.code) existingMap[s.code] = { price: s.price, change: s.change, sparkline: s.sparkline }
-      })
+        // 기존 가격/스파크라인 보존 (60초 주기 갱신 시 초기화 방지)
+        const existingMap = {}
+        recommendedStocks.value.forEach(s => {
+          if (s.code) existingMap[s.code] = { price: s.price, change: s.change, sparkline: s.sparkline }
+        })
 
-      recommendedStocks.value = data.recommendations.map(r => {
-        const code = r.stock_code || String(r.rank)
-        const prev = existingMap[code] || {}
-        return {
-          rank: r.rank,
-          name: r.stock_name,
-          code,
-          price: prev.price || '-',
-          change: prev.change ?? 0,
-          reason: r.reason || r.news_evidence || '',
-          sparkline: prev.sparkline || '0,20 10,18 20,22 30,15 40,12 50,10 60,6',
-        }
-      })
-      topThemesCount.value = Array.isArray(data.top_themes) ? data.top_themes.length : '-'
-      analysisUpdatedAt.value = updatedAt
-
-      // 마켓 카드 뉴스 업데이트
-      const mn = data.market_news
-      if (mn?.kospi?.length > 0)
-        kospiNews.value = mn.kospi.map((t, i) => ({ id: i + 1, title: t }))
-      if (mn?.kosdaq?.length > 0)
-        kosdaqNews.value = mn.kosdaq.map((t, i) => ({ id: i + 1, title: t }))
-
-      // newsList는 DB 뉴스(/news/latest)가 없을 때만 AI 분석 결과로 채움
-      if (newsList.value.length === 0) {
-        const items = []
-        if (data.overall_market_summary) {
-          items.push({ id: 0, tag: '시장요약', title: data.overall_market_summary, time: updatedAt })
-        }
-        data.recommendations.forEach(r => {
-          if (r.news_evidence) {
-            items.push({ id: r.rank, tag: r.theme || '분석', title: r.news_evidence, time: updatedAt })
+        recommendedStocks.value = data.recommendations.map(r => {
+          const code = r.stock_code || String(r.rank)
+          const prev = existingMap[code] || {}
+          return {
+            rank: r.rank,
+            name: r.stock_name,
+            code,
+            price: prev.price || '-',
+            change: prev.change ?? 0,
+            reason: r.reason || r.news_evidence || '',
+            sparkline: prev.sparkline || '0,20 10,18 20,22 30,15 40,12 50,10 60,6',
           }
         })
-        if (items.length > 0) newsList.value = items
+        topThemesCount.value = Array.isArray(data.top_themes) ? data.top_themes.length : '-'
+        analysisUpdatedAt.value = updatedAt
+
+        // 마켓 카드 뉴스 업데이트
+        const mn = data.market_news
+        if (mn?.kospi?.length > 0)
+          kospiNews.value = mn.kospi.map((t, i) => ({ id: i + 1, title: t }))
+        if (mn?.kosdaq?.length > 0)
+          kosdaqNews.value = mn.kosdaq.map((t, i) => ({ id: i + 1, title: t }))
+
+        // newsList는 DB 뉴스(/news/latest)가 없을 때만 AI 분석 결과로 채움
+        if (newsList.value.length === 0) {
+          const items = []
+          if (data.overall_market_summary) {
+            items.push({ id: 0, tag: '시장요약', title: data.overall_market_summary, time: updatedAt })
+          }
+          data.recommendations.forEach(r => {
+            if (r.news_evidence) {
+              items.push({ id: r.rank, tag: r.theme || '분석', title: r.news_evidence, time: updatedAt })
+            }
+          })
+          if (items.length > 0) newsList.value = items
+        }
+        return  // 성공
       }
-    }
-  } catch (_) {}
+    } catch (_) {}
+    if (attempt < MAX) await new Promise(r => setTimeout(r, 2000))
+  }
 }
 
 function calcSparkline(prices) {
