@@ -169,18 +169,6 @@ def save_analysis_to_db(result: dict[str, Any], news_data: str = "") -> int | No
         return None
 
 
-_KR_STOCK_KEYWORDS = (
-    "코스피", "코스닥", "삼성", "현대", "SK", "LG", "카카오", "네이버", "셀트리온",
-    "한화", "포스코", "기아", "005930", "000660", "KOSPI", "KOSDAQ",
-    "수주", "매출", "영업이익", "HBM", "반도체", "조선", "바이오",
-)
-
-
-def _is_korean_stock_news(news_data: str) -> bool:
-    """LS 뉴스가 한국 주식 관련 내용인지 간단히 판별."""
-    return any(kw in news_data for kw in _KR_STOCK_KEYWORDS)
-
-
 async def run_scheduled_analysis() -> None:
     """서버 시작 시 즉시 한 번 실행 후 10분마다 반복. 실패 시 1분 후 재시도 (최대 3회)."""
     loop = asyncio.get_event_loop()
@@ -192,11 +180,9 @@ async def run_scheduled_analysis() -> None:
             print("[스케줄러] AI 분석 시작...")
             news_data = await loop.run_in_executor(None, fetch_ls_news)
 
+            # LS증권 API는 한국 주식시장 전용 API이므로 별도 키워드 필터 없이 바로 분석
             if not news_data.strip():
                 print("[스케줄러] 뉴스 데이터 없음. 샘플 데이터 사용.")
-                news_data = get_sample_news_data()
-            elif not _is_korean_stock_news(news_data):
-                print("[스케줄러] 한국 주식 관련 뉴스 없음. 샘플 데이터 사용.")
                 news_data = get_sample_news_data()
 
             result = await loop.run_in_executor(None, analyze_news_with_gemini, news_data)
