@@ -26,17 +26,19 @@ market_indices: dict[str, Any] = {
 }
 
 
-def _strip_article_text(text: str) -> str:
+def _strip_article_text(text: str, is_title: bool = False) -> str:
     """저장 직전 기사 제목/본문에서 LS API 이진 잔재 제거."""
     if not text:
         return text
-    # t3102OutBlock 접두사 제거
     text = re.sub(r'^t3102OutBlock\w*\s*', '', text, flags=re.IGNORECASE)
-    # C0 제어문자 제거 (탭·LF·CR 제외)
     text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
-    # 14자리 날짜코드 + 언론사명 패턴 제거
     text = re.sub(r'\d{14}[가-힣A-Za-z0-9]*', '', text)
-    # 연속 공백 정리
+    text = re.sub(r'(\s+\^[^\s가-힣]+)', ' ', text)
+    text = re.sub(r'\s+_[A-Z가-힣]{1,10}(\s|$)', ' ', text)
+    if is_title:
+        # 제목은 이진 시그니처(캐럿·언더스코어 등) 이후 전체 제거
+        text = re.sub(r'\s*[\^_\|\\{}\[\]~`]+.*$', '', text)
+        text = re.sub(r'\s+[A-Z]{1}\s+[A-Z]{2,}\s+\d.*$', '', text)
     text = re.sub(r'[ \t]{2,}', ' ', text)
     return text.strip()
 
@@ -91,8 +93,8 @@ def _save_news_to_db(news_data: str, proj_root) -> None:
 
     saved = 0
     for art in articles:
-        clean_title = _strip_article_text(art['title'])
-        clean_summary = _strip_article_text(art['summary']) if art.get('summary') else None
+        clean_title = _strip_article_text(art['title'], is_title=True)
+        clean_summary = _strip_article_text(art['summary'], is_title=False) if art.get('summary') else None
         if not clean_title:
             continue
         # URL은 제목 해시로 생성 (LS API는 기사 URL을 제공하지 않음)

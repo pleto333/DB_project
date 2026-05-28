@@ -104,9 +104,28 @@ def _clean_news_text(text: str) -> str:
     cleaned = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', cleaned)
     # LS API 고정폭 이진 잔재: 14자리 날짜코드 + 언론사명 패턴 제거 (예: 20260528111805한국경제)
     cleaned = re.sub(r'\d{14}[가-힣A-Za-z0-9]*', '', cleaned)
+    # LS API 이진 프로토콜 잔재 패턴 제거:
+    #   - " ^XX" 캐럿+대문자 패턴 (예: ^AH, ^v가, ^x0)
+    #   - " _XX" 언더스코어+알파뉴메릭 패턴 (예: _AH, _飭)
+    #   - " C LIMIT" / " js" 스타일 임의 ASCII 문자열
+    cleaned = re.sub(r'\s+\^[\w\W]{0,30}$', '', cleaned)           # title 끝 ^xxx 이진 패턴
+    cleaned = re.sub(r'(\s+\^[^\s가-힣]+)', ' ', cleaned)           # 본문 중간 ^xxx 패턴
+    cleaned = re.sub(r'\s+_[A-Z가-힣]{1,10}(\s|$)', ' ', cleaned)  # _AH, _飭 패턴
+    cleaned = re.sub(r'\s+[A-Z]{1}\s+[A-Z]{2,}\s+\d.*$', '', cleaned)  # "C LIMIT 4..." 트레일링
     cleaned = cleaned.replace("\r", "\n")
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    return cleaned.strip()
+
+
+def _clean_title(text: str) -> str:
+    """제목 전용 클리닝 — 이진 잔재 이후 텍스트를 잘라냄."""
+    cleaned = _clean_news_text(text)
+    # 제목에 남은 고정폭 이진 잔재 트레일링 완전 제거:
+    # 캐럿·언더스코어·대괄호 등 이진 시그니처 이후 전체 제거
+    cleaned = re.sub(r'\s*[\^_\|\\{}\[\]~`]+.*$', '', cleaned)
+    # " - GARBAGE" 또는 " SO GARBAGE" 스타일 (대문자 단어 2개+ 이진 패턴)
+    cleaned = re.sub(r'\s+-\s*[^\s가-힣a-zA-Z0-9"\'%·\-,\.·’“”…]+.*$', '', cleaned)
     return cleaned.strip()
 
 
@@ -123,9 +142,9 @@ def _format_news_data(api_json: Any) -> str:
         body = _clean_news_text(body)
         title = ""
         if isinstance(title_block, dict):
-            title = _clean_news_text(str(title_block.get("sTitle", "")))
+            title = _clean_title(str(title_block.get("sTitle", "")))
         elif isinstance(title_block, list) and title_block and isinstance(title_block[0], dict):
-            title = _clean_news_text(str(title_block[0].get("sTitle", "")))
+            title = _clean_title(str(title_block[0].get("sTitle", "")))
         stock_codes = []
         if isinstance(stock_block, list):
             stock_codes = [
