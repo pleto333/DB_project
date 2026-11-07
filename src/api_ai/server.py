@@ -5,6 +5,7 @@ import hashlib
 import os
 import sys
 import time
+from datetime import datetime
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -19,6 +20,27 @@ from .config import get_project_root
 from .gemini import analyze_news_with_gemini, get_dummy_analysis_result, get_sample_news_data
 from .ls_api import fetch_global_indices, fetch_ls_access_token, fetch_ls_news, fetch_stock_current_price, fetch_stock_daily_prices
 from .scheduler import market_indices, run_market_indices, run_scheduled_analysis, save_analysis_to_db
+
+
+def _date_key(value: Any) -> str:
+    if not value:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    text = text.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(text).strftime("%Y-%m-%d")
+    except ValueError:
+        return text[:10]
+
+
+def _is_fresh_for_analysis(article: dict[str, Any], analysis_date: str) -> bool:
+    if not analysis_date:
+        return True
+    article_date = _date_key(article.get("published_at") or article.get("collected_at"))
+    baseline_date = _date_key(analysis_date)
+    return bool(article_date and baseline_date and article_date >= baseline_date)
 
 
 class AnalyzeRequest(BaseModel):
@@ -99,7 +121,6 @@ def create_web_app():
         try:
             if request.use_dummy_ai:
                 result = get_dummy_analysis_result()
-                save_analysis_to_db(result)
                 return result
             selected_news_data = (request.news_data or "").strip()
             if not selected_news_data:
@@ -303,8 +324,25 @@ def create_web_app():
             proj_root = get_project_root()
             if str(proj_root) not in sys.path:
                 sys.path.insert(0, str(proj_root))
-            from src.db.database import get_news_by_stock
+            from src.db.database import get_latest_analysis_json, get_news_by_stock
+            latest = get_latest_analysis_json()
+            latest_recommendations = latest.get("recommendations") or []
+            if latest_recommendations:
+                is_current_recommendation = any(
+                    str(rec.get("stock_code", "")).strip() == code
+                    or (name and str(rec.get("stock_name", "")).strip() == name)
+                    for rec in latest_recommendations
+                )
+                if not is_current_recommendation:
+                    return {"articles": []}
+
+            analysis_date = latest.get("analysis_date") or latest.get("analyzed_at") or ""
             articles = get_news_by_stock(stock_name=name, stock_code=code, limit=5)
+            articles = [
+                article
+                for article in articles
+                if _is_fresh_for_analysis(article, analysis_date)
+            ]
             return {"articles": articles}
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"뉴스 조회 실패: {exc}")

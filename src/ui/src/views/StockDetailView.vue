@@ -106,7 +106,7 @@
         <!-- 오른쪽: 관련 뉴스 -->
         <div class="col-right">
           <p class="section-title">📰 분석 근거 뉴스</p>
-          <div class="related-news-list">
+          <div v-if="stock.relatedNews.length > 0" class="related-news-list">
             <div class="related-news-item" v-for="news in stock.relatedNews" :key="news.id">
               <div class="news-top">
                 <span :class="['news-sentiment', news.sentiment]">
@@ -118,6 +118,9 @@
               <p class="news-desc">{{ news.desc }}</p>
             </div>
           </div>
+          <p v-else class="empty-news">
+            최신 실제 뉴스가 없습니다. AI 분석 근거는 왼쪽 상세 분석에만 표시됩니다.
+          </p>
 
           <!-- 포트폴리오 추가 버튼 -->
           <button class="portfolio-btn" @click="togglePortfolio"
@@ -138,7 +141,7 @@ import axios from 'axios'
 
 const route = useRoute()
 const router = useRouter()
-const BASE_URL = 'http://localhost:8000'
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
 
 const isAdded = ref(false)
 const userId = ref(localStorage.getItem('user_id') || '')
@@ -180,13 +183,26 @@ function calcDetailSparkline(prices) {
   }
 }
 
+function dateKey(value) {
+  const match = String(value || '').match(/\d{4}-\d{2}-\d{2}/)
+  return match ? match[0] : ''
+}
+
+function isFreshForAnalysis(article, analysisDate) {
+  const baseline = dateKey(analysisDate)
+  const articleDate = dateKey(article.published_at || article.collected_at)
+  return !baseline || !articleDate || articleDate >= baseline
+}
+
 onMounted(async () => {
   // AI 추천 데이터 로드 (빈 결과 시 최대 3회 재시도)
   const MAX_REC = 3
+  let latestAnalysisDate = ''
   for (let attempt = 1; attempt <= MAX_REC; attempt++) {
     try {
       const res = await axios.get(`${BASE_URL}/recommendations/latest`)
       const data = res.data
+      latestAnalysisDate = data.analyzed_at || data.analysis_date || latestAnalysisDate
       if (!data || !data.recommendations) {
         if (attempt < MAX_REC) { await new Promise(r => setTimeout(r, 2000)); continue }
         break
@@ -211,14 +227,7 @@ onMounted(async () => {
         positives: [rec.expected_momentum].filter(Boolean),
         negatives: [rec.risk].filter(Boolean),
         detailAnalysis: rec.reason + (rec.news_evidence ? '\n\n[분석 근거] ' + rec.news_evidence : ''),
-        // 더미 데이터 방지: news_evidence로 초기화 → DB 뉴스 조회 후 덮어씀
-        relatedNews: rec.news_evidence ? [{
-          id: 0,
-          sentiment: rec.recommendation === 'BUY' ? 'positive' : 'neutral',
-          time: data.analysis_date || '-',
-          title: `[AI 분석] ${rec.stock_name}`,
-          desc: rec.news_evidence,
-        }] : [],
+        relatedNews: [],
       }
       break  // 성공
     } catch (_) {
@@ -268,7 +277,9 @@ onMounted(async () => {
       const res = await axios.get(`${BASE_URL}/stocks/${stock.value.code}/news`, {
         params: { name: stock.value.name }
       })
-      const articles = res.data.articles || []
+      const articles = (res.data.articles || []).filter(article =>
+        isFreshForAnalysis(article, latestAnalysisDate)
+      )
       if (articles.length > 0) {
         stock.value.relatedNews = articles.map(a => ({
           id: a.article_id,
@@ -430,6 +441,16 @@ function goBack() {
 .news-time { font-size: 12px; color: #94a3b8; }
 .news-title { font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 6px; line-height: 1.5; }
 .news-desc { font-size: 12px; color: #94a3b8; line-height: 1.5; }
+.empty-news {
+  background: #fff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 16px;
+  padding: 16px 18px;
+}
 
 .portfolio-btn {
   width: 100%; padding: 14px; border-radius: 12px; font-size: 14px;

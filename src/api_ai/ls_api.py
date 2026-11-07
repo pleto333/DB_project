@@ -172,10 +172,16 @@ def _clean_news_text(text: str) -> str:
     cleaned = re.sub(r'\[[^\]]{0,40}/[^\]]{0,40}\s*기자[^\]]*\]', '', cleaned)
     # 하이퍼링크 안내 푸터 제거 (파이낸셜뉴스 등): "→ ..." 스타일
     cleaned = re.sub(r'→[^\n]{0,100}\n?', '', cleaned)
+    # 언론사 주요뉴스/원문 링크 푸터 제거
+    cleaned = re.sub(r'\[[^\]]*주요뉴스[^\]]*\][\s\S]*$', '', cleaned)
+    cleaned = re.sub(r'원문\s*바로가기[\s\S]*$', '', cleaned)
+    cleaned = re.sub(r'\s*b\s*\n\s*[가-힣]{2,4}\s*기자\s*', ' ', cleaned)
     # 언론사 저작권 고지 제거
     cleaned = re.sub(r'※\s*저작권자[^\n]*\n?', '', cleaned)
     # 기자 이메일 주소 제거
     cleaned = re.sub(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', '', cleaned)
+    # 남은 단독 CJK 한자는 LS 고정폭 이진 잔재로 들어오는 경우가 많다.
+    cleaned = re.sub(r'[一-鿿]', '', cleaned)
     cleaned = cleaned.replace("\r", "\n")
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
@@ -208,7 +214,7 @@ def _format_news_data(api_json: Any) -> str:
         # HTML/CSS 응답 감지: LS API가 오류 HTML 페이지를 반환한 경우 무시
         _html_signals = ("font-size:", "line-height:", "font-family:", "@media", "body,td,", "border:0px")
         if any(sig in body for sig in _html_signals):
-            print("[뉴스파싱] HTML 오류 응답 감지 — 해당 뉴스 패킷 무시.")
+            print("[뉴스파싱] HTML 오류 응답 감지 - 해당 뉴스 패킷 무시.")
             return ""
 
         title = ""

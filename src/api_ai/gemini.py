@@ -8,6 +8,8 @@ import time
 from datetime import datetime
 from typing import Any
 
+import requests
+
 from .config import get_gemini_model, get_gemini_models, is_missing_env_value
 
 
@@ -197,50 +199,48 @@ class GeminiUnavailableError(RuntimeError):
     """Gemini API 서비스 불가."""
 
 
-def analyze_news_with_gemini(news_data: str) -> dict:
-    from google import genai
+def _extract_gemini_text(response_json: dict[str, Any]) -> str:
+    candidates = response_json.get("candidates") or []
+    if not candidates:
+        return ""
 
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if is_missing_env_value(api_key):
-        raise RuntimeError("Gemini API Key가 없습니다. .env 파일에 GEMINI_API_KEY를 설정해 주세요.")
+    content = candidates[0].get("content") or {}
+    parts = content.get("parts") or []
+    return "".join(str(part.get("text", "")) for part in parts if isinstance(part, dict)).strip()
 
-    prompt = build_prompt(news_data)
-    client = genai.Client(api_key=api_key)
-    max_retries = int(os.getenv("GEMINI_MAX_RETRIES", "3"))
-    response = None
-    last_error: Exception | None = None
 
-    for gemini_model in get_gemini_models():
-        for attempt in range(1, max_retries + 1):
-            try:
-                response = client.models.generate_content(
-                    model=gemini_model,
-                    contents=prompt,
-                    config={"response_mime_type": "application/json", "temperature": 0.2},
-                )
-                break
-            except Exception as exc:
-                last_error = exc
-                error_text = str(exc)
-                if "429" in error_text or "RESOURCE_EXHAUSTED" in error_text:
-                    raise GeminiRateLimitError("Gemini API 사용량 한도에 도달했습니다.") from exc
-                if "503" in error_text or "UNAVAILABLE" in error_text:
-                    wait = min(2 ** attempt, 10)
-                    print(f"Gemini 혼잡. model={gemini_model}, attempt={attempt}/{max_retries}, {wait}초 후 재시도.")
-                    time.sleep(wait)
-                    continue
-                raise RuntimeError(f"Gemini API 호출 중 오류: {exc}") from exc
-        if response is not None:
-            break
-        print(f"{gemini_model} 모델 재시도 실패. 다음 fallback 모델을 시도합니다.")
+def _generate_content_with_rest(api_key: str, model: str, prompt: str) -> str:
+    """Call Gemini through the public REST API.
 
-    if response is None:
-        raise GeminiUnavailableError(f"Gemini API 호출을 완료하지 못했습니다: {last_error}")
+    This avoids the google-genai package, which currently fails to install in
+    this project's MSYS Python environment because of compiled dependencies.
+    """
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    response = requests.post(
+        url,
+        params={"key": api_key},
+        json={
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "temperature": 0.2,
+            },
+        },
+        timeout=int(os.getenv("GEMINI_REQUEST_TIMEOUT", "60")),
+    )
 
-    raw_text = getattr(response, "text", None)
-    if not raw_text or not raw_text.strip():
+    if response.status_code == 429:
+        raise GeminiRateLimitError("Gemini API 사용량 한도에 도달했습니다.")
+    if response.status_code >= 400:
+        raise RuntimeError(f"Gemini API HTTP {response.status_code}: {response.text[:500]}")
+
+    raw_text = _extract_gemini_text(response.json())
+    if not raw_text:
         raise RuntimeError("Gemini 응답이 비어 있습니다.")
+    return raw_text
 
+
+def _parse_gemini_json(raw_text: str) -> dict:
     cleaned_text = _extract_json_object(raw_text)
     try:
         return json.loads(cleaned_text)
@@ -252,3 +252,41 @@ def analyze_news_with_gemini(news_data: str) -> dict:
         except json.JSONDecodeError as exc:
             print(f"Gemini 응답을 JSON으로 파싱하지 못했습니다: {exc}\n[원본]\n{raw_text}")
             raise RuntimeError(f"Gemini JSON 파싱 실패: {exc}") from exc
+
+
+def analyze_news_with_gemini(news_data: str) -> dict:
+    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if is_missing_env_value(api_key):
+        raise RuntimeError("Gemini API Key가 없습니다. .env 파일에 GEMINI_API_KEY를 설정해 주세요.")
+
+    prompt = build_prompt(news_data)
+    max_retries = int(os.getenv("GEMINI_MAX_RETRIES", "3"))
+    last_error: Exception | None = None
+
+    for gemini_model in get_gemini_models():
+        for attempt in range(1, max_retries + 1):
+            try:
+                raw_text = _generate_content_with_rest(api_key, gemini_model, prompt)
+                return _parse_gemini_json(raw_text)
+            except Exception as exc:
+                if isinstance(exc, GeminiRateLimitError):
+                    raise
+                last_error = exc
+                error_text = str(exc)
+                if "429" in error_text or "RESOURCE_EXHAUSTED" in error_text:
+                    raise GeminiRateLimitError("Gemini API 사용량 한도에 도달했습니다.") from exc
+                if (
+                    "503" in error_text
+                    or "UNAVAILABLE" in error_text
+                    or "timed out" in error_text
+                    or "Read timed out" in error_text
+                    or "Gemini JSON 파싱 실패" in error_text
+                ):
+                    wait = min(2 ** attempt, 10)
+                    print(f"Gemini 혼잡. model={gemini_model}, attempt={attempt}/{max_retries}, {wait}초 후 재시도.")
+                    time.sleep(wait)
+                    continue
+                raise RuntimeError(f"Gemini API 호출 중 오류: {exc}") from exc
+        print(f"{gemini_model} 모델 재시도 실패. 다음 fallback 모델을 시도합니다.")
+
+    raise GeminiUnavailableError(f"Gemini API 호출을 완료하지 못했습니다: {last_error}")

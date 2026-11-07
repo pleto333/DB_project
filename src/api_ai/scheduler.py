@@ -13,6 +13,7 @@ from typing import Any
 from .config import (
     DEFAULT_GEMINI_MODEL,
     LS_DEFAULT_NEWS_WS_URL,
+    env_flag,
     get_gemini_model,
     get_project_root,
 )
@@ -55,6 +56,12 @@ def _strip_article_text(text: str, is_title: bool = False) -> str:
     text = re.sub(r'[◆◇◈]', '', text)
     # 이진 잔재 화살표만 제거 (●▶ 등 뉴스 불릿은 유지)
     text = re.sub(r'[←↑↓↔↕↖↗↘↙⇒⇔⇐⇑⇓⇕]', '', text)
+    # 언론사 주요뉴스/원문 링크 푸터 제거
+    text = re.sub(r'\[[^\]]*주요뉴스[^\]]*\][\s\S]*$', '', text)
+    text = re.sub(r'원문\s*바로가기[\s\S]*$', '', text)
+    text = re.sub(r'\s*b\s*\n\s*[가-힣]{2,4}\s*기자\s*', ' ', text)
+    # 남은 단독 CJK 한자는 LS 고정폭 이진 잔재로 들어오는 경우가 많다.
+    text = re.sub(r'[一-鿿]', '', text)
     if is_title:
         # 제목은 이진 시그니처(캐럿·언더스코어 등) 이후 전체 제거
         text = re.sub(r'\s*[\^_\|\\{}\[\]~`]+.*$', '', text)
@@ -142,27 +149,42 @@ def save_analysis_to_db(result: dict[str, Any], news_data: str = "") -> int | No
             sys.path.insert(0, str(proj_root))
         from src.db.database import add_stock, save_llm_analysis, save_stock_recommendation
 
+        news_text = (news_data or "").strip()
+        if not news_text or news_text in {"auto", "rate_limit_fallback"}:
+            print("[분석저장] 실제 뉴스 데이터가 없어 DB 저장을 건너뜁니다.")
+            return None
+
+        valid_recommendations = []
+        for rec in result.get("recommendations", []):
+            stock_code = str(rec.get("stock_code", "")).strip()
+            stock_name = str(rec.get("stock_name", "")).strip()
+            if stock_name and stock_code and stock_code.isdigit():
+                valid_recommendations.append(rec)
+            else:
+                rank_no = int(rec.get("rank", 0))
+                print(f"[분석저장] rank {rank_no} '{stock_name}' - 유효한 종목코드 없음, 건너뜀")
+
+        if not valid_recommendations:
+            print("[분석저장] 유효한 종목코드가 있는 추천이 없어 DB 저장을 건너뜁니다.")
+            return None
+
+        response = dict(result)
+        response["recommendations"] = valid_recommendations
+
         model_name = get_gemini_model()
         analysis_id = save_llm_analysis(
             model_name=model_name,
-            input_summary=(news_data[:500] if news_data else "auto"),
-            response=result,
+            input_summary=news_text[:500],
+            response=response,
         )
 
-        for rec in result.get("recommendations", []):
+        for rec in valid_recommendations:
             stock_code = str(rec.get("stock_code", "")).strip()
             stock_name = str(rec.get("stock_name", "")).strip()
             market_raw = str(rec.get("market", "KOSPI")).strip().upper()
             rank_no = int(rec.get("rank", 0))
             reason = str(rec.get("reason", "")).strip()
             confidence_str = str(rec.get("confidence", "중")).strip()
-
-            if not stock_name:
-                continue
-            # 종목코드가 없거나 숫자 코드가 아니면 저장하지 않음 (ETF/테마 추상 항목 차단)
-            if not stock_code or not stock_code.isdigit():
-                print(f"[분석저장] rank {rank_no} '{stock_name}' — 유효한 종목코드 없음, 건너뜀")
-                continue
 
             market_enum = market_raw if market_raw in ("KOSPI", "KOSDAQ", "NASDAQ", "NYSE") else "OTHER"
             stock_id = add_stock(stock_code, stock_name, market_enum)
@@ -200,24 +222,27 @@ async def run_scheduled_analysis() -> None:
             print("[스케줄러] AI 분석 시작...")
             news_data = await loop.run_in_executor(None, fetch_ls_news)
 
-            # LS증권 API는 한국 주식시장 전용 API이므로 별도 키워드 필터 없이 바로 분석
             if not news_data.strip():
-                print("[스케줄러] 뉴스 데이터 없음. 샘플 데이터 사용.")
-                news_data = get_sample_news_data()
+                if env_flag("USE_SAMPLE_NEWS", default=False):
+                    print("[스케줄러] 뉴스 데이터 없음. USE_SAMPLE_NEWS=true라 샘플 데이터 사용.")
+                    news_data = get_sample_news_data()
+                else:
+                    print("[스케줄러] 실제 뉴스 데이터가 없어 이번 분석을 건너뜁니다.")
+                    retry_count = 0
+                    await asyncio.sleep(600)
+                    continue
 
-            result = await loop.run_in_executor(None, analyze_news_with_gemini, news_data)
+            if env_flag("USE_DUMMY_AI", default=False):
+                result = get_dummy_analysis_result()
+            else:
+                result = await loop.run_in_executor(None, analyze_news_with_gemini, news_data)
             save_analysis_to_db(result, news_data)
             print("[스케줄러] 분석 완료. 다음 실행까지 10분 대기.")
             retry_count = 0
             await asyncio.sleep(600)
 
         except GeminiRateLimitError as exc:
-            # Gemini 사용량 한도: 더미 데이터로 DB 저장 후 1시간 대기
-            print(f"[스케줄러] {exc} 더미 데이터로 대체 저장 후 1시간 대기.")
-            try:
-                save_analysis_to_db(get_dummy_analysis_result(), "rate_limit_fallback")
-            except Exception as save_exc:
-                print(f"[스케줄러] 더미 데이터 저장 실패: {save_exc}")
+            print(f"[스케줄러] {exc} 실제 분석 결과가 아니므로 DB 저장 없이 1시간 대기.")
             await asyncio.sleep(3600)
 
         except Exception as exc:

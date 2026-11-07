@@ -239,9 +239,14 @@ def get_latest_analysis_json() -> dict[str, Any]:
     try:
         # ① 최신 분석 메타데이터
         cursor.execute("""
-            SELECT analysis_id, response_json, analyzed_at, model_name
-            FROM llm_analysis
-            ORDER BY analyzed_at DESC, analysis_id DESC
+            SELECT la.analysis_id, la.response_json, la.analyzed_at, la.model_name
+            FROM llm_analysis la
+            WHERE EXISTS (
+                SELECT 1
+                FROM stock_recommendations sr
+                WHERE sr.analysis_id = la.analysis_id
+            )
+            ORDER BY la.analyzed_at DESC, la.analysis_id DESC
             LIMIT 1
         """)
         meta = cursor.fetchone()

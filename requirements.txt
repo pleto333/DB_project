@@ -1,8 +1,7 @@
 mysql-connector-python
-google-genai
 python-dotenv
 requests
 websockets
 fastapi
-uvicorn[standard]
+uvicorn
 yfinance
